@@ -12,7 +12,7 @@ branches:
 jobs:
 build:
 
-```
+
 runs-on: ubuntu-latest
 
 steps:
@@ -33,4 +33,4 @@ steps:
 
   - name: Build
     run: npm run build
-```
+
