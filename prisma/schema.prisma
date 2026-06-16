@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String @id @default(uuid())
+  email        String @unique
+  passwordHash String
+
+  chart UserChart?
+
+  onboardingCompleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile UserProfile?
+}
+
+model UserProfile {
+  id String @id @default(uuid())
+
+  userId String @unique
+
+  fullName String?
+
+  birthDate DateTime?
+
+  birthTime String?
+
+  birthTimeKnown Boolean @default(true)
+
+  birthPlace String?
+
+  locationId Int?
+
+  location Location? @relation(fields: [locationId], references: [id])
+
+  latitude  Float?
+  longitude Float?
+  timezone  String?
+
+  primaryFocus   String?
+  secondaryFocus String?
+
+  pressureResponse String?
+  misunderstoodFor String?
+
+  entryReason String?
+
+  entryQuestion String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Location {
+  id Int @id @default(autoincrement())
+
+  name  String
+  state String
+
+  latitude  Float
+  longitude Float
+
+  population Int?
+
+  timezone String
+
+  searchName String
+
+  createdAt DateTime @default(now())
+
+  userProfiles UserProfile[]
+}
+
+model UserChart {
+  id String @id @default(uuid())
+
+  userId String @unique
+
+  chartData Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
