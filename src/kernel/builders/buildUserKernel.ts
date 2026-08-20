@@ -1,3 +1,9 @@
+import { buildChartKernel } from "./buildChartKernel";
+import { buildTimelineKernel } from "./buildTimelineKernel";
+import { buildStructuresKernel } from "./buildStructuresKernel";
+import { buildPlanetaryStateKernel } from "./buildPlanetaryStateKernel";
+import { buildThemesKernel } from "./buildThemesKernel";
+
 export async function buildUserKernel(
   chartData: any
 ) {

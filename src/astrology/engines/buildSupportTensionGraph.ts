@@ -1,6 +1,6 @@
 import {
   PlanetaryAspect
-} from "./calculatePlanetaryAspects";
+} from "./detectPlanetaryAspects";
 
 export interface SupportTensionNode {
 

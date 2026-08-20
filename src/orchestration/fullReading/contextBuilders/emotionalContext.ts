@@ -4,7 +4,7 @@ import {
 
 export function buildEmotionalContext(kernel: any) {
 
-    const relevant =
+    const relevant: any =
   selectRelevantSymbols({
 
     domain: "EMOTIONAL",
@@ -60,7 +60,7 @@ export function buildEmotionalContext(kernel: any) {
     psychologicalPressure: {
 
   planetaryState:
-    relevant.planetaryState,
+    relevant.emotionalPlanets,
 
   activationPriority:
     relevant.activationPriority,

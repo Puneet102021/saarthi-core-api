@@ -4,7 +4,7 @@ import {
 
 export function buildKarmicContext(kernel: any) {
 
-    const relevant =
+    const relevant: any =
   selectRelevantSymbols({
 
     domain: "KARMA",
@@ -65,15 +65,8 @@ export function buildKarmicContext(kernel: any) {
       eighthHouse
     },
 
-    karmicStructures:
-  relevant,
-
-    evolutionaryPressure: {
-
-  planetaryState:
-    relevant.planetaryState
-},
-
+    karmicStructures: relevant, evolutionaryPressure: { planetaryState: relevant.karmicPlanets },
+    
     karmicRepetition: {
 
       dispositorChains:
