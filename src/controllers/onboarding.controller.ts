@@ -4,6 +4,8 @@ import { prisma } from "../lib/prisma";
 
 import { AuthRequest } from "../middleware/auth.middleware";
 
+import { getUserChart } from "../services/chartService";
+
 export const submitOnboarding = async (
   req: AuthRequest,
   res: Response
@@ -127,6 +129,20 @@ export const submitOnboarding = async (
         onboardingCompleted: true
       }
     });
+
+    /*
+      Build the natal chart now so the first question is fast. A failure
+      here (bad birth time format, say) must not fail onboarding; the chart
+      is rebuilt on first use.
+    */
+    try {
+      await getUserChart(userId);
+    } catch (chartError) {
+      console.warn(
+        "ONBOARDING_CHART_DEFERRED",
+        (chartError as Error).message
+      );
+    }
 
     res.json({
       success: true,

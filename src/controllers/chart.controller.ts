@@ -1,794 +1,94 @@
 import { Request, Response } from "express";
 
-import {
-  calculatePlanetaryPositions
-} from "../astrology/calculators/calculatePlanetaryPositions";
+import { buildNatalChart } from "../astrology/chart";
+import { dashaAt, describePeriod } from "../astrology/dasha";
+import { transitSnapshot } from "../astrology/transits";
+import type { BirthInput, NatalChart } from "../astrology/types";
+import { AuthRequest } from "../middleware/auth.middleware";
+import { getUserChart, ProfileIncompleteError } from "../services/chartService";
 
-import {
-  calculateAscendant
-} from "../astrology/calculators/calculateAscendant";
+export class BadRequestError extends Error {}
 
-import {
-  calculateVimshottariDasha
-} from "../astrology/calculators/calculateVimshottariDasha";
+/* Birth details from a request body, for the developer preview routes. */
+export function parseBirthInput(body: any): BirthInput {
+  const birth = body?.birth;
 
-import {
-  buildHouses
-} from "../astrology/builders/buildHouses";
+  if (!birth || typeof birth !== "object") {
+    throw new BadRequestError("Body must include birth: { date, time, timezone, latitude, longitude }");
+  }
 
-import {
-  mapPlanetsToHouses
-} from "../astrology/builders/mapPlanetsToHouses";
+  const latitude = Number(birth.latitude);
+  const longitude = Number(birth.longitude);
 
-import {
-  detectConjunctions
-} from "../astrology/engines/detectConjunctions";
+  if (typeof birth.date !== "string") throw new BadRequestError("birth.date must be YYYY-MM-DD");
+  if (!Number.isFinite(latitude) || Math.abs(latitude) > 90) throw new BadRequestError("birth.latitude is invalid");
+  if (!Number.isFinite(longitude) || Math.abs(longitude) > 180) throw new BadRequestError("birth.longitude is invalid");
 
-import {
-  detectHouseClusters
-} from "../astrology/engines/detectHouseClusters";
+  const utcOffsetMinutes =
+    birth.utcOffsetMinutes === undefined ? undefined : Number(birth.utcOffsetMinutes);
 
-import {
-  detectSignClusters
-} from "../astrology/engines/detectSignClusters";
+  if (!birth.timezone && !Number.isFinite(utcOffsetMinutes)) {
+    throw new BadRequestError("birth.timezone (IANA, e.g. Asia/Kolkata) or birth.utcOffsetMinutes is required");
+  }
 
-import {
-  detectPlanetaryAspects
-} from "../astrology/engines/detectPlanetaryAspects";
+  return {
+    date: birth.date,
+    time: typeof birth.time === "string" && birth.time.trim() ? birth.time : null,
+    timezone: birth.timezone,
+    utcOffsetMinutes,
+    latitude,
+    longitude
+  };
+}
 
-import {
-  buildPlanetaryConditionTags
-} from "../astrology/engines/buildPlanetaryConditionTags";
+export function chartView(chart: NatalChart, now = new Date()) {
+  const running = dashaAt(chart.dasha.mahadashas, now);
 
-import {
-  detectDominantPatterns
-} from "../astrology/engines/detectDominantPatterns";
-
-import {
-  buildSignLords
-} from "../astrology/engines/buildSignLords";
-
-import {
-  buildHouseLords
-} from "../astrology/engines/buildHouseLords";
-
-import {
-  buildDispositorChains
-} from "../astrology/engines/buildDispositorChains";
-
-import {
-  buildFunctionalRoles
-} from "../astrology/engines/buildFunctionalRoles";
-
-import {
-  buildPlanetDignities
-} from "../astrology/engines/buildPlanetDignities";
-
-import {
-  buildVedicDrishti
-} from "../astrology/engines/buildVedicDrishti";
-
-import {
-  buildReinforcementGraph
-} from "../astrology/engines/buildReinforcementGraph";
-
-import {
-  buildAxisActivations
-} from "../astrology/engines/buildAxisActivations";
-
-import {
-  buildPlanetaryState
-} from "../astrology/engines/buildPlanetaryState";
-
-import {
-  buildSupportTensionGraph
-} from "../astrology/engines/buildSupportTensionGraph";
-
-import {
-  buildMahadashaTimeline
-} from "../astrology/engines/buildMahadashaTimeline";
-
-import {
-  buildAntardashaTimeline
-} from "../astrology/engines/buildAntardashaTimeline";
-
-import {
-  buildTransitActivations
-} from "../astrology/engines/buildTransitActivations";
-
-import {
-  calculateTransitPositions
-} from "../astrology/calculators/calculateTransitPositions";
-
-import {
-  buildActivationPriority
-} from "../astrology/engines/buildActivationPriority";
-
-import {
-  buildFullReadingOrchestrator
-} from "../orchestration/fullReading/fullReadingOrchestrator";
-
-import {
-  evaluateYogaDoshaEngine
-} from "../astrology/yogaDosha/yogaDoshaEngine";
-
-import {
-  symbolicEvaluator
-} from "../astrology/evaluation/symbolicEvaluator";
-
-import {
-  buildHouseActivations
-} from "../astrology/engines/buildHouseActivations";
-
-export async function getRawChart(
-  req: Request,
-  res: Response
-) {
-
-  try {
-
-    const year =
-      Number(req.query.year);
-
-    const month =
-      Number(req.query.month);
-
-    const day =
-      Number(req.query.day);
-
-    const hour =
-      Number(req.query.hour);
-
-    if (
-
-      !year ||
-      !month ||
-      !day ||
-
-      Number.isNaN(hour)
-    ) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        error:
-          "Missing required query params"
-      });
+  return {
+    chart,
+    now: {
+      date: now.toISOString(),
+      period: running
+        ? {
+            label: describePeriod(running.pratyantardasha),
+            mahadasha: running.mahadasha,
+            antardasha: running.antardasha,
+            pratyantardasha: running.pratyantardasha
+          }
+        : null,
+      transits: transitSnapshot(chart, now)
     }
+  };
+}
 
-    const result =
-      await calculatePlanetaryPositions(
+export function sendError(res: Response, error: unknown, tag: string) {
+  if (error instanceof BadRequestError || error instanceof ProfileIncompleteError) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
 
-        year,
-        month,
-        day,
-        hour
-      );
+  /* Bad dates and times surface from the time parser as plain errors with a clear message. */
+  if (error instanceof Error && /^Birth (date|time)|Invalid (birth|12-hour)|timezone/i.test(error.message)) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
 
-    return res.json({
+  console.error(tag, error);
+  return res.status(500).json({ success: false, error: "Internal server error" });
+}
 
-      success: true,
-
-      data: result
-    });
-
-  } catch (error: any) {
-
-    console.error(
-      "RAW_CHART_ERROR",
-      error
-    );
-
-    return res.status(500).json({
-
-      success: false,
-
-      error:
-        error?.message ||
-        "Internal server error"
-    });
+export async function getMyChart(req: AuthRequest, res: Response) {
+  try {
+    const { chart } = await getUserChart(req.user!.userId);
+    return res.json({ success: true, data: chartView(chart) });
+  } catch (error) {
+    return sendError(res, error, "CHART_ERROR");
   }
 }
 
-export async function getHouseTest(
-  req: Request,
-  res: Response
-) {
-
+export async function previewChart(req: Request, res: Response) {
   try {
-
-    /*
-      Query params
-    */
-
-    const year =
-      Number(req.query.year);
-
-    const month =
-      Number(req.query.month);
-
-    const day =
-      Number(req.query.day);
-
-    const hour =
-      Number(req.query.hour);
-
-    const latitude =
-      Number(req.query.latitude);
-
-    const longitude =
-      Number(req.query.longitude);
-
-    /*
-      Validation
-    */
-
-    if (
-
-      !year ||
-      !month ||
-      !day ||
-
-      Number.isNaN(hour) ||
-
-      Number.isNaN(latitude) ||
-
-      Number.isNaN(longitude)
-    ) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        error:
-          "Invalid query parameters"
-      });
-    }
-
-    /*
-      Planetary positions
-    */
-
-    const planetaryPositions =
-      await calculatePlanetaryPositions(
-
-        year,
-        month,
-        day,
-        hour
-      );
-
-    /*
-      Ascendant
-    */
-
-    const ascendant =
-      calculateAscendant({
-
-        julianDay:
-          planetaryPositions.julianDay,
-
-        latitude,
-
-        longitude
-      });
-
-    /*
-      Houses
-    */
-
-    const houses =
-      buildHouses(
-        ascendant.sign
-      );
-
-    /*
-      Placements
-    */
-
-    const placements =
-      mapPlanetsToHouses(
-
-        planetaryPositions.planets,
-
-        houses
-      );
-
-      const houseActivations =
-  buildHouseActivations(
-    placements
-  );
-
-    /*
-      Conjunctions
-    */
-
-    const conjunctions =
-      detectConjunctions({
-
-        planets:
-          planetaryPositions.planets,
-
-        placements,
-
-        maxOrb: 8
-      });
-
-    /*
-      Clusters
-    */
-
-    const houseClusters =
-      detectHouseClusters(
-        placements
-      );
-
-    const signClusters =
-      detectSignClusters(
-        planetaryPositions.planets
-      );
-
-    /*
-      Aspects
-    */
-
-    const planetaryAspects =
-      detectPlanetaryAspects(
-        planetaryPositions.planets
-      );
-
-    /*
-      Condition tags
-    */
-
-    const planetaryConditionTags =
-      buildPlanetaryConditionTags(
-
-        planetaryPositions.planets,
-
-        placements,
-
-        planetaryAspects
-      );
-
-    /*
-      Dominant patterns
-    */
-
-    const dominantPatterns =
-      detectDominantPatterns({
-
-        houseClusters,
-
-        signClusters,
-
-        conjunctions,
-
-        aspects:
-          planetaryAspects
-      });
-
-    /*
-      Lords
-    */
-
-    const signLords =
-      buildSignLords();
-
-    const houseLords =
-      buildHouseLords(
-
-        houses,
-
-        placements
-      );
-
-    /*
-      Dispositor chains
-    */
-
-    const dispositorChains =
-      buildDispositorChains({
-
-        planets:
-          planetaryPositions.planets
-      });
-
-    /*
-      Functional roles
-    */
-
-    const functionalRoles =
-      buildFunctionalRoles(
-        houseLords
-      );
-
-    /*
-      Dignities
-    */
-
-    const planetDignities =
-      buildPlanetDignities(
-        planetaryPositions.planets
-      );
-
-    /*
-      Vedic drishti
-    */
-
-    const vedicDrishti =
-      buildVedicDrishti(
-        placements
-      );
-
-    /*
-      Reinforcement graph
-    */
-
-    const reinforcementGraph =
-      buildReinforcementGraph({
-
-        dominantPatterns,
-
-        dispositorChains,
-
-        functionalRoles,
-
-        placements
-      });
-
-    /*
-      Axis activations
-    */
-
-    const axisActivations =
-      buildAxisActivations(
-
-        placements,
-
-        houseClusters
-      );
-
-    /*
-      Planetary state
-    */
-
-    const planetaryState =
-      buildPlanetaryState({
-
-        planets:
-          planetaryPositions.planets,
-
-        placements,
-
-        dignities:
-          planetDignities,
-
-        functionalRoles,
-
-        reinforcementGraph,
-
-        axisActivations,
-
-        dispositorChains
-      });
-
-    /*
-      Support/tension
-    */
-
-    const supportTensionGraph =
-      buildSupportTensionGraph(
-        planetaryAspects
-      );
-
-    /*
-      Moon
-    */
-
-    const moon =
-      planetaryPositions.planets.find(
-
-        (p) =>
-          p.planet === "Moon"
-      );
-
-    if (!moon) {
-
-      throw new Error(
-        "Moon not found"
-      );
-    }
-
-    /*
-      Birth date
-
-      Handles decimal hour:
-      10.5 => 10:30
-    */
-
-    const birthHour =
-      Math.floor(hour);
-
-    const birthMinute =
-      Math.round(
-        (hour % 1) * 60
-      );
-
-    const birthDate =
-      new Date(
-
-        Date.UTC(
-
-          year,
-
-          month - 1,
-
-          day,
-
-          birthHour,
-
-          birthMinute
-        )
-      );
-
-    if (
-      Number.isNaN(
-        birthDate.getTime()
-      )
-    ) {
-
-      throw new Error(
-        "Invalid birth date"
-      );
-    }
-
-    /*
-      Vimshottari
-    */
-
-    const vimshottariDasha =
-      calculateVimshottariDasha({
-
-        moonLongitude:
-          moon.longitude,
-
-        moonNakshatra:
-          moon.nakshatra,
-
-        birthDate
-      });
-
-      const mahadashaTimeline =
-  buildMahadashaTimeline({
-
-    birthMahadashaPlanet:
-      vimshottariDasha
-        .currentMahadasha
-        .planet,
-
-    birthDate,
-
-    balanceAtBirthYears:
-      vimshottariDasha
-        .currentMahadasha
-        .balanceAtBirthYears
-  });
-
-  const currentMahadasha =
-  mahadashaTimeline.find(
-    period => period.isCurrent
-  );
-
-const antardashaTimeline =
-  currentMahadasha
-    ? buildAntardashaTimeline({
-        mahadashaPlanet:
-          currentMahadasha.planet,
-
-        mahadashaStartDate:
-          new Date(
-            currentMahadasha.startDate
-          ),
-
-        mahadashaEndDate:
-          new Date(
-            currentMahadasha.endDate
-          )
-      })
-    : [];
-
-    const transitPositions =
-  await calculateTransitPositions();
-
-const transitActivations =
-  buildTransitActivations({
-
-    transitPlanets:
-      transitPositions.planets,
-
-    natalPlanets:
-      planetaryPositions.planets
-  });
-
- const currentAntardasha =
-  antardashaTimeline.find(
-    d => d.isCurrent
-  );
-
-const activationPriority =
-  buildActivationPriority({
-
-   
-    transitActivations,
-
-    reinforcementGraph,
-
-    planetaryState
-  });
-
-  
-
-
-  const natalKernel = {
-
-  ascendant,
-
-  ascendantLord:
-    houseLords?.find(
-      (h: any) => h.house === 1
-    )?.lord,
-
-    
-
-  houses,
-
-  placements,
-
-  conjunctions,
-
-  houseClusters,
-
-  signClusters,
-
-  houseActivations,
-
-  planetaryAspects,
-
-  planetaryConditionTags,
-
-  dominantPatterns,
-
-  dispositorChains,
-
-  reinforcementGraph,
-
-  axisActivations,
-
-  supportTensionGraph,
-
-  planetaryState,
-
-  activationPriority,
-
-  transitPositions,
-
-  transitActivations,
-
-  mahadashaTimeline,
-
-  antardashaTimeline,
-
-  planetDignities,
-
-  functionalRoles,
-
-  vedicDrishti,
-
-  signLords,
-
-  houseLords
-};
-
-/*
-  Yoga / Dosha Analysis
-*/
-
-const yogaDoshaAnalysis =
-  evaluateYogaDoshaEngine(
-    natalKernel
-  );
-
-/*
-  Enriched Natal Kernel
-*/
-
-const enrichedKernel = {
-
-  ...natalKernel,
-
-  detectedYogas:
-    yogaDoshaAnalysis.yogas,
-
-  detectedDoshas:
-    yogaDoshaAnalysis.doshas,
-
-  yogaDoshaAnalysis
-};
-
-const symbolicEvaluation =
-  symbolicEvaluator(
-    enrichedKernel
-  );
-
-const fullyEnrichedKernel = {
-
-  ...enrichedKernel,
-
-  symbolicEvaluation
-};
-/*
-  Reading Orchestration
-*/
-
-console.log(
-  "YOGA_DOSHA_DEBUG",
-  {
-    yogas:
-      enrichedKernel.detectedYogas,
-
-    doshas:
-      enrichedKernel.detectedDoshas
-  }
-);
-
-console.log(
-  "SYMBOLIC_EVALUATION",
-  JSON.stringify(
-    symbolicEvaluation,
-    null,
-    2
-  )
-);
-
-const orchestratedReading =
-  await buildFullReadingOrchestrator(
-    fullyEnrichedKernel
-  );
-
-  
-
-
-    /*
-      Response
-    */
-
-    return res.json({
-
-      success: true,
-
-      data:
-
-        symbolicEvaluation,
-
-        orchestratedReading
-    });
-
-  } catch (error: any) {
-
-    console.error(
-      "HOUSE_TEST_ERROR",
-      error
-    );
-
-    return res.status(500).json({
-
-      success: false,
-
-      error:
-        error?.message ||
-        "Internal server error"
-    });
+    const chart = buildNatalChart(parseBirthInput(req.body));
+    return res.json({ success: true, data: chartView(chart) });
+  } catch (error) {
+    return sendError(res, error, "CHART_PREVIEW_ERROR");
   }
 }

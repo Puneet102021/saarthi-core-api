@@ -14,6 +14,13 @@ import authRoutes from "./routes/auth.routes";
 import onboardingRoutes
 from "./routes/onboarding.routes";
 
+import askRoutes
+from "./routes/ask.routes";
+
+import {
+  devRoutesEnabled
+} from "./routes/devRoutes";
+
 dotenv.config();
 
 const app =
@@ -49,6 +56,11 @@ app.use(
   onboardingRoutes
 );
 
+app.use(
+  "/api/ask",
+  askRoutes
+);
+
 app.get(
   "/",
   (_req, res) => {
@@ -68,5 +80,11 @@ app.listen(
     console.log(
       `Saarthi Core API running on port ${PORT}`
     );
+
+    if (devRoutesEnabled()) {
+      console.warn(
+        "ENABLE_DEV_ROUTES is on: unauthenticated /preview routes are exposed"
+      );
+    }
   }
 );

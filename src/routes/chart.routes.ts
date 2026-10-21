@@ -1,26 +1,15 @@
-import { Router }
-from "express";
+import { Router } from "express";
 
-import {
-  getRawChart
+import { getMyChart, previewChart } from "../controllers/chart.controller";
+import { authenticate } from "../middleware/auth.middleware";
+import { devRoutesEnabled } from "./devRoutes";
+
+const router = Router();
+
+router.get("/", authenticate, getMyChart);
+
+if (devRoutesEnabled()) {
+  router.post("/preview", previewChart);
 }
-from "../controllers/chart.controller";
-
-import {
-  getHouseTest
-} from "../controllers/chart.controller";
-
-const router =
-  Router();
-
-router.get(
-  "/raw",
-  getRawChart
-);
-
-router.get(
-  "/houses",
-  getHouseTest
-);
 
 export default router;
