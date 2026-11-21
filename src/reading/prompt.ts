@@ -27,6 +27,12 @@ Every reply
 - Luck and fate: the chart shows tendencies and timing, never a fixed fate. Effort, choices and the people around them change outcomes. Say so when someone feels unlucky or stuck.
 - Tailor to the person: use what they said about how they handle pressure and what they feel misunderstood for. For example, someone who withdraws under pressure might be nudged to reach out to one person. Never quote their profile back mechanically.
 
+First readings
+- When the brief says FIRST READING, this is the opening reply of a conversation: give a full, structured reading in the order the brief sets out, with short, warm markdown headings (### ...). It replaces the word limits above.
+- Explain the dasha system in plain words the first time: the mahadasha is a long chapter of several years ruled by one planet; the antardasha is the sub-chapter within it, ruled by another planet that colours the chapter; the pratyantardasha is the short phase of weeks or months that sets the tone right now. For each running period, say what its planet stands for in this chart (the houses it rules and sits in, from the brief) and how that tends to show up in daily life: mood, work, relationships, energy. Then say how the layers combine into what the person is living through.
+- Then look ahead: what comes next, when, and how it is likely to affect them, using only the upcoming periods, transits and dates in the brief. Be specific about dates and honest about tone, without fear: a harder phase ahead is something to prepare for, not dread.
+- Keep it human: every astrological point should lead back to their life and their message.
+
 Using the evidence
 - Base every astrological statement on the evidence brief and cite it inline, right after the statement, as [E1] or [E1, E4]. Every sentence that mentions a planet, house, yoga, dasha, transit or the day's Moon needs a citation; a reply that talks about the chart without citations is wrong. You may interpret those facts with standard Parashari knowledge, but never introduce a placement, yoga, dosha, dasha, transit or date that is not in the brief.
 - For timing, use only the date ranges in the brief. Speak of windows and tendencies ("more likely between ...", "a supportive period for ..."), never certainties. The dasha shows what is promised in a period; transits show when the ground is ready.
@@ -69,6 +75,34 @@ const REPLY_SHAPE: Record<Need, string> = {
   optimise: "Reply shape: what is supportive now with [E#], how to use it, one honest watch-out. 120 to 250 words."
 };
 
+/* The shape of a first reading, by need. Daily check-ins are never first readings. */
+const FIRST_READING_SHAPE: Record<Exclude<Need, "daily">, string> = {
+  support: `FIRST READING. 450 to 650 words, in this order:
+1. No heading: 2 to 4 sentences of reassurance. Acknowledge what they said, normalise it, steady them. No astrology yet.
+2. "### Why this might be happening": the period they are in, layer by layer (mahadasha, antardasha, pratyantardasha, plus any Saturn transit in the brief), what each planet means in their chart and how the layers combine into what they feel. Cite every point [E#].
+3. "### What's coming next": a short timeline of the next 2 to 4 shifts in the brief (the next pratyantardasha and antardasha, a mahadasha change if listed, Saturn, Jupiter or Rahu changing signs, Sade Sati beginning or ending), soonest first. For each: the date, then how it is likely to feel and what it may bring, in their life's terms. Cite each [E#]. End with the overall direction: easing, building or a time to be careful.
+4. "### What can help now": 2 or 3 small, concrete suggestions from REMEDY OPTIONS [R#], a sentence each on how and why, and one tiny step for today.
+5. "### Where we can go from here": one caring question about their situation, and offer two specific things you can look into next (for example, what the next phase means for their work, or how to prepare for it).`,
+  support_guidance: `FIRST READING. 500 to 700 words, in this order:
+1. No heading: 2 to 4 sentences of reassurance that acknowledge what they are going through. Then a short, honest answer to their question.
+2. "### Why this is happening": the period they are in, layer by layer (mahadasha, antardasha, pratyantardasha, plus any transit in the brief), what each planet means in their chart and how they combine. Cite every point [E#].
+3. "### What's coming next": a short timeline of the next 2 to 4 shifts in the brief (the next pratyantardasha and antardasha, a mahadasha change if listed, Saturn, Jupiter or Rahu changing signs, Sade Sati beginning or ending), soonest first. For each: the date, then how it is likely to feel and what it may bring, in their life's terms. Cite each [E#]. End with the overall direction: easing, building or a time to be careful.
+4. "### What can help now": 2 or 3 small, concrete suggestions from REMEDY OPTIONS [R#], and one tiny step for today.
+5. "### Where we can go from here": one caring question, and offer two specific things you can look into next.`,
+  guidance: `FIRST READING. 500 to 700 words, in this order:
+1. No heading: answer their question directly in 2 or 3 sentences, warmly and honestly, so they feel oriented.
+2. "### Why, in your chart": what in their chart bears on this, then the period they are in, layer by layer (mahadasha, antardasha, pratyantardasha), what each planet means for this matter and how they combine. Weigh what supports against what challenges. Cite every point [E#].
+3. "### What's coming next": a short timeline of the next 2 to 4 shifts in the brief (the next pratyantardasha and antardasha, a mahadasha change if listed, Saturn, Jupiter or Rahu changing signs, Sade Sati beginning or ending), soonest first. For each: the date, then how it is likely to feel and what it may bring, in their life's terms. Cite each [E#]. End with the overall direction: easing, building or a time to be careful.
+4. "### What you can do": 2 or 3 small, concrete suggestions (from REMEDY OPTIONS [R#] where they fit) and one practical next step.
+5. "### Where we can go from here": one question about their situation, and offer two specific things you can look into next.`,
+  optimise: `FIRST READING. 450 to 650 words, in this order:
+1. No heading: 2 or 3 sentences that share their good news warmly and say what is genuinely supportive now.
+2. "### Why this is a good time": the period they are in, layer by layer (mahadasha, antardasha, pratyantardasha, plus supportive transits in the brief), what each planet brings in their chart and how they combine. Cite every point [E#].
+3. "### What's coming next": a short timeline of the next 2 to 4 shifts in the brief (the next pratyantardasha and antardasha, a mahadasha change if listed, Saturn, Jupiter or Rahu changing signs, Sade Sati beginning or ending), soonest first. For each: the date, then how it is likely to feel and what it may bring, in their life's terms. Cite each [E#]. End with the overall direction: easing, building or a time to be careful. Say how long the good window lasts.
+4. "### How to make the most of it": 2 or 3 small practices from REMEDY OPTIONS [R#], and one honest watch-out.
+5. "### Where we can go from here": one question about their plans, and offer two specific things you can look into next.`
+};
+
 function evidenceLine(e: Evidence): string {
   const when = e.timeframe ? ` [${fmt(e.timeframe.start)} to ${fmt(e.timeframe.end)}]` : "";
   const area = e.domain === "timing" ? "timing" : `natal, ${e.domain}`;
@@ -88,7 +122,8 @@ export function buildUserMessage({
   evidence,
   remedies = [],
   now,
-  profile
+  profile,
+  firstReading = false
 }: {
   chart: NatalChart;
   question: string;
@@ -97,6 +132,7 @@ export function buildUserMessage({
   remedies?: OfferedRemedy[];
   now: Date;
   profile?: PersonProfile;
+  firstReading?: boolean;
 }): string {
   const running = dashaAt(chart.dasha.mahadashas, now);
 
@@ -140,7 +176,7 @@ export function buildUserMessage({
     evidence.map(evidenceLine).join("\n\n"),
     remedyBlock,
     "",
-    REPLY_SHAPE[intent.need],
+    firstReading && intent.need !== "daily" ? FIRST_READING_SHAPE[intent.need] : REPLY_SHAPE[intent.need],
     "",
     `THEIR MESSAGE\n${question}`
   ]

@@ -1,4 +1,5 @@
 import { planetIn } from "../astrology/chart";
+import { PLANET_SIGNIFICATIONS } from "../astrology/constants";
 import { dashaAt, describePeriod, periodsInWindow } from "../astrology/dasha";
 import { ordinal } from "../astrology/math";
 import { doubleTransits, saturnCycles, transitSegments, transitSnapshot } from "../astrology/transits";
@@ -86,6 +87,33 @@ function lordLine(p: PlanetInfo, connection: Connection): string {
   return `${planetSummary(p)}. ${tie}`;
 }
 
+/*
+  Life areas of each house, worded for explaining a period to the person.
+  (The 8th is about change, never lifespan.)
+*/
+const LIFE_AREAS: Record<number, string> = {
+  1: "self, health and direction",
+  2: "family, savings and speech",
+  3: "effort, courage and communication",
+  4: "home, mother and inner peace",
+  5: "creativity, children and learning",
+  6: "work routines, health habits and competition",
+  7: "partnerships and marriage",
+  8: "sudden change, transformation and shared resources",
+  9: "fortune, mentors and beliefs",
+  10: "career and standing",
+  11: "income, gains and friendships",
+  12: "expenses, rest, solitude and distant places"
+};
+
+/* What a period lord brings in this chart: its natural themes and the houses it rules and sits in. */
+export function lordThemes(p: PlanetInfo): string {
+  const rules = p.ownsHouses.length
+    ? `rules the ${p.ownsHouses.map((h) => `${ordinal(h)} (${LIFE_AREAS[h]})`).join(" and ")}`
+    : "rules no house (a node gives the results of its sign lord and the planets with it)";
+  return `In this chart ${p.planet} ${rules} and sits in the ${ordinal(p.house)} (${LIFE_AREAS[p.house]}). Its natural themes: ${PLANET_SIGNIFICATIONS[p.planet]}.`;
+}
+
 function currentDashaEvidence(chart: NatalChart, domains: DomainId[], now: Date): Evidence[] {
   const running = dashaAt(chart.dasha.mahadashas, now);
   if (!running) return [];
@@ -106,12 +134,102 @@ function currentDashaEvidence(chart: NatalChart, domains: DomainId[], now: Date)
       domain: "timing" as const,
       kind: "dasha" as const,
       title: `Current ${name}: ${period.lord}`,
-      statement: `Running now: ${describePeriod(period)}, ${fmt(period.start)} to ${fmt(period.end)}. ${lordLine(p, connection)}`,
+      statement: `Running now: ${describePeriod(period)}, ${fmt(period.start)} to ${fmt(period.end)}. ${lordLine(p, connection)} ${lordThemes(p)}`,
       polarity: lordPolarity(p),
       weight: base * Math.max(0.45, Math.min(1, 0.45 + connection.score * 0.4)),
       timeframe: { start: period.start, end: period.end }
     };
   });
+}
+
+/*
+  What comes next, for first readings: the next pratyantardasha and
+  antardasha (and the next mahadasha when it is near), the slow planets'
+  next sign changes, and Saturn's hard passages starting or ending. Each
+  says when, and what the planet brings in this chart, so the reply can
+  explain how the next shifts will feel.
+*/
+export function upcomingEvidence(chart: NatalChart, domains: DomainId[], now: Date): Evidence[] {
+  const YEAR = 365 * 24 * 60 * 60 * 1000;
+  const evidence: Evidence[] = [];
+
+  const levels: [1 | 2 | 3, string, number, number][] = [
+    [3, "Pratyantardasha", 0.55, 2],
+    [2, "Antardasha", 0.75, 4],
+    [1, "Mahadasha", 0.85, 6]
+  ];
+
+  for (const [level, name, weight, years] of levels) {
+    const horizon = new Date(now.getTime() + years * YEAR);
+    const next = periodsInWindow(chart.dasha.mahadashas, now, horizon, level).find(
+      (period) => Date.parse(period.start) > now.getTime()
+    );
+    if (!next) continue;
+
+    const p = planetIn(chart, next.lord);
+    evidence.push({
+      id: "",
+      key: `dasha:next:${level}`,
+      domain: "timing",
+      kind: "dasha",
+      title: `Next ${name}: ${next.lord}, from ${fmt(next.start)}`,
+      statement: `The current ${name.toLowerCase()} ends on ${fmt(next.start)}; then ${describePeriod(next)} runs ${fmt(next.start)} to ${fmt(next.end)}. ${lordLine(p, connectionTo(p, domains))} ${lordThemes(p)}`,
+      polarity: lordPolarity(p),
+      weight,
+      timeframe: { start: next.start, end: next.end }
+    });
+  }
+
+  /* The slow planets' next moves over the coming two years. */
+  const end = new Date(now.getTime() + 2 * YEAR);
+  const segments = transitSegments(chart, now, end, ["Saturn", "Jupiter", "Rahu"]);
+  const reference = chart.houseReference === "moon" ? "the Moon sign" : "the ascendant";
+
+  for (const planet of ["Saturn", "Jupiter", "Rahu"] as const) {
+    const next = segments.find((s) => s.planet === planet && Date.parse(s.start) > now.getTime());
+    if (!next) continue;
+
+    const nodes = planet === "Rahu" ? " (with Ketu opposite)" : "";
+    evidence.push({
+      id: "",
+      key: `upcoming:${planet}:${next.start}`,
+      domain: "timing",
+      kind: "transit",
+      title: `${planet} moves into ${next.sign} on ${fmt(next.start)}`,
+      statement:
+        `On ${fmt(next.start)} ${planet}${nodes} moves into ${next.sign} until ${fmt(next.end)}: ` +
+        `${ordinal(next.houseFromLagna)} from ${reference} (${LIFE_AREAS[next.houseFromLagna]}) and ` +
+        `${ordinal(next.houseFromMoon)} from the natal Moon, ${next.favourable ? "a favourable" : "not a favourable"} position by classical gochara. ` +
+        `${planet} in transit brings its themes (${PLANET_SIGNIFICATIONS[planet]}) to that area of life.`,
+      polarity: next.favourable ? "supportive" : "challenging",
+      weight: planet === "Rahu" ? 0.5 : 0.65,
+      timeframe: { start: next.start, end: next.end }
+    });
+  }
+
+  /* Saturn's hard passages: when one ahead begins, or the current one ends. */
+  const saturnSegments = transitSegments(chart, new Date(now.getTime() - 3 * YEAR), new Date(now.getTime() + 3 * YEAR), ["Saturn"]);
+  for (const cycle of saturnCycles(saturnSegments)) {
+    const starts = Date.parse(cycle.start) > now.getTime();
+    const ends = !starts && Date.parse(cycle.end) > now.getTime();
+    if (!starts && !ends) continue;
+
+    evidence.push({
+      id: "",
+      key: `upcoming:saturn:${cycle.kind}:${cycle.start}`,
+      domain: "timing",
+      kind: "transit",
+      title: starts ? `${cycle.description} begins ${fmt(cycle.start)}` : `${cycle.description} ends ${fmt(cycle.end)}`,
+      statement: starts
+        ? `${cycle.description} runs ${fmt(cycle.start)} to ${fmt(cycle.end)}: a stretch of pressure and slower results that rewards patience, structure and steady effort.`
+        : `${cycle.description} is running now and ends on ${fmt(cycle.end)}; as it lifts, pressure usually eases and delayed efforts start to move.`,
+      polarity: starts ? "challenging" : "mixed",
+      weight: cycle.kind === "sade_sati" ? 0.7 : 0.55,
+      timeframe: { start: cycle.start, end: cycle.end }
+    });
+  }
+
+  return evidence;
 }
 
 /* The sub-periods in the window most tied to the question, best first. */

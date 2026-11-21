@@ -11,6 +11,12 @@ delete process.env.OPENAI_API_KEY;
 
 const now = new Date("2026-10-21T00:00:00Z");
 
+/* Earlier turns, so a reply is a follow-up rather than a conversation's first reading. */
+const earlier = [
+  { role: "user" as const, content: "Hello" },
+  { role: "assistant" as const, content: "Hello. What's on your mind?" }
+];
+
 const chart = buildNatalChart({
   date: "1992-03-14",
   time: "06:45",
@@ -45,7 +51,8 @@ describe("askQuestion (dry run)", () => {
 
     assert.equal(result.answer, null);
     assert.deepEqual(result.intent.domains, ["career"]);
-    assert.ok(result.evidence.length >= 8 && result.evidence.length <= 17, `${result.evidence.length} items`);
+    /* A first reading: up to 8 natal facts and 9 + 4 timing facts. */
+    assert.ok(result.evidence.length >= 8 && result.evidence.length <= 22, `${result.evidence.length} items`);
     assert.ok(result.evidence.some((e) => e.key === "house:10"), "10th house evidence");
     assert.ok(result.evidence.some((e) => e.key === "lord:10"), "10th lord evidence");
     assert.ok(result.evidence.some((e) => e.kind === "dasha"), "dasha evidence");
@@ -107,7 +114,7 @@ describe("inferring what the person needs (keywords)", () => {
 
 describe("askQuestion by need (dry run)", () => {
   it("keeps support answers light on astrology", async () => {
-    const result = await askQuestion({ chart, question: "I'm exhausted, nothing works out for me", now, dryRun: true });
+    const result = await askQuestion({ chart, question: "I'm exhausted, nothing works out for me", history: earlier, now, dryRun: true });
     assert.equal(result.need, "support");
     assert.ok(result.evidence.length <= 7, `${result.evidence.length} items`);
     assert.ok(result.evidence.some((e) => e.domain === "mind" || e.kind === "dasha"));
@@ -148,7 +155,7 @@ describe("askQuestion by need (dry run)", () => {
   });
 
   it("offers no remedies for a neutral question unless the evidence is mostly challenging", async () => {
-    const result = await askQuestion({ chart, question: "What is my personality like?", now, dryRun: true });
+    const result = await askQuestion({ chart, question: "What is my personality like?", history: earlier, now, dryRun: true });
     const scored = result.evidence.filter((e) => e.kind !== "caveat" && e.polarity !== "neutral");
     const hard = scored.filter((e) => e.polarity === "challenging").length / scored.length;
     assert.equal(result.remediesOffered.length > 0, hard >= 0.6);
@@ -185,5 +192,44 @@ describe("daily check-in for tomorrow", () => {
     const day = result.evidence.find((e) => e.key === "daily:chandra-bala")!;
     assert.equal(day.timeframe!.start, "2026-10-22");
     assert.match(day.title, /^Tomorrow's Moon/);
+  });
+});
+
+describe("first reading", () => {
+  it("opens a conversation with the full period story and what comes next", async () => {
+    const result = await askQuestion({ chart, question: "I'm exhausted, nothing works out for me", now, dryRun: true });
+    const keys = result.evidence.map((e) => e.key);
+    for (const level of [1, 2, 3]) assert.ok(keys.includes(`dasha:now:${level}`), `running level ${level}`);
+    assert.ok(keys.some((k) => k.startsWith("dasha:next:")), "next period");
+    assert.ok(keys.some((k) => k.startsWith("upcoming:")), "upcoming transit");
+    assert.match(result.prompt!.user, /FIRST READING/);
+    assert.match(result.prompt!.user, /What's coming next/);
+    assert.match(result.prompt!.user, /In this chart \w+ rules/);
+    assert.ok(result.remediesOffered.length > 0);
+  });
+
+  it("keeps later turns conversational", async () => {
+    const result = await askQuestion({
+      chart,
+      question: "I'm exhausted, nothing works out for me",
+      history: [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Hello, how are you?" }
+      ],
+      now,
+      dryRun: true
+    });
+    assert.doesNotMatch(result.prompt!.user, /FIRST READING/);
+    assert.ok(!result.evidence.some((e) => e.key.startsWith("upcoming:")));
+  });
+
+  it("keeps daily check-ins short even when they open a conversation", async () => {
+    const result = await askQuestion({ chart, question: "How's today?", now, dryRun: true });
+    assert.doesNotMatch(result.prompt!.user, /FIRST READING/);
+  });
+
+  it("never words the 8th house as lifespan", async () => {
+    const result = await askQuestion({ chart, question: "Should I change jobs?", now, dryRun: true });
+    assert.doesNotMatch(result.prompt!.user, /In this chart[^.]*longevity/);
   });
 });

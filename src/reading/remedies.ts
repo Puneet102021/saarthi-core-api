@@ -401,7 +401,8 @@ export function selectRemedies(
   chart: NatalChart,
   evidence: Evidence[],
   intent: QuestionIntent,
-  now: Date
+  now: Date,
+  { firstReading = false }: { firstReading?: boolean } = {}
 ): OfferedRemedy[] {
   const struggling = intent.need === "support" || intent.need === "support_guidance" || intent.sensitive === "distress";
 
@@ -442,7 +443,7 @@ export function selectRemedies(
     strongLords.forEach(add);
 
     if (!planets.length) add("Jupiter");
-  } else if (intent.wantsRemedies || struggling || challengingShare >= 0.6) {
+  } else if (intent.wantsRemedies || struggling || firstReading || challengingShare >= 0.6) {
     for (const lord of dashaLords) {
       if (lordPolarity(planetIn(chart, lord)) === "challenging") add(lord);
     }

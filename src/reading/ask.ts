@@ -10,7 +10,7 @@ import type { PersonProfile } from "./profile";
 import { ANSWER_SCHEMA, buildUserMessage, SYSTEM_PROMPT } from "./prompt";
 import { rankEvidence } from "./rank";
 import { OfferedRemedy, selectRemedies } from "./remedies";
-import { timingEvidence } from "./timing";
+import { timingEvidence, upcomingEvidence } from "./timing";
 
 export interface AskInput {
   chart: NatalChart;
@@ -58,7 +58,25 @@ const isCurrent = (e: Evidence, now: Date) =>
   !e.timeframe || (Date.parse(e.timeframe.start) <= now.getTime() && Date.parse(e.timeframe.end) >= now.getTime());
 
 /* The chart facts worth reading for this need, before ranking. */
-function gatherEvidence(chart: NatalChart, intent: QuestionIntent, now: Date, question: string): Evidence[] {
+function gatherEvidence(
+  chart: NatalChart,
+  intent: QuestionIntent,
+  now: Date,
+  question: string,
+  firstReading: boolean
+): Evidence[] {
+  const evidence = evidenceForNeed(chart, intent, now, question);
+  if (!firstReading) return evidence;
+
+  /* A first reading explains when the current phase ends and what comes next. */
+  const seen = new Set(evidence.map((e) => `${e.kind}:${e.title.split(" ")[0]}:${e.timeframe?.start}`));
+  const next = upcomingEvidence(chart, intent.domains, now).filter(
+    (e) => !seen.has(`${e.kind}:${e.title.split(" ")[0]}:${e.timeframe?.start}`)
+  );
+  return [...evidence, ...next];
+}
+
+function evidenceForNeed(chart: NatalChart, intent: QuestionIntent, now: Date, question: string): Evidence[] {
   const domains = intent.domains;
 
   switch (intent.need) {
@@ -127,8 +145,13 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
     };
   }
 
-  const evidence = rankEvidence(gatherEvidence(input.chart, intent, now, question), intent);
-  const remediesOffered = selectRemedies(input.chart, evidence, intent, now);
+  /* The opening reply of a conversation is a fuller, structured reading; later turns stay conversational. */
+  const firstReading = history.length === 0 && intent.need !== "daily";
+
+  const evidence = rankEvidence(gatherEvidence(input.chart, intent, now, question, firstReading), intent, {
+    firstReading
+  });
+  const remediesOffered = selectRemedies(input.chart, evidence, intent, now, { firstReading });
 
   const user = buildUserMessage({
     chart: input.chart,
@@ -137,7 +160,8 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
     evidence,
     remedies: remediesOffered,
     now,
-    profile: input.profile
+    profile: input.profile,
+    firstReading
   });
 
   if (input.dryRun) {
@@ -166,7 +190,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
   }>({
     model,
     temperature: 0.5,
-    maxTokens: 1200,
+    maxTokens: firstReading ? 1800 : 1200,
     schemaName: "saarthi_answer",
     schema: ANSWER_SCHEMA,
     messages: [{ role: "system", content: SYSTEM_PROMPT }, ...history, { role: "user", content: user }]

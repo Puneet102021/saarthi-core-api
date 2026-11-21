@@ -219,6 +219,16 @@ textarea { resize: vertical; }
 .answer p { margin: 0 0 12px; }
 .answer ul, .answer ol { margin: 0 0 12px; padding-left: 22px; }
 .answer strong { font-weight: 600; }
+.answer h2, .answer h3, .answer h4 {
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-text);
+  margin: 22px 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.answer > :first-child { margin-top: 0; }
 .cite {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; margin: 0 1px 0 3px;
