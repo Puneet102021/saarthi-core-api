@@ -38,8 +38,9 @@ The preview routes exist only when `ENABLE_DEV_ROUTES=true`. Never set it in pro
 | Variable | Default | |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | | required for `/api/ask` |
-| `OPENAI_MODEL` | `gpt-4o-mini` | writes the answer; a stronger model cites more precisely |
-| `OPENAI_INTENT_MODEL` | `OPENAI_MODEL` | reads the question |
+| `OPENAI_MODEL` | `gpt-5.4-mini` | writes the answer; reasoning models (o-series, GPT-5 and later) are detected automatically |
+| `OPENAI_INTENT_MODEL` | `gpt-4o-mini` | reads the message (need, life areas, timing); keep it small and fast |
+| `OPENAI_REASONING_EFFORT` | `low` | `minimal`, `low`, `medium` or `high`, for reasoning answer models |
 | `AYANAMSA` | `lahiri` | `lahiri`, `raman` or `kp` |
 | `NODE_TYPE` | `true` | `true` or `mean` node for Rahu/Ketu |
 | `SWEPH_EPHE_PATH` | | Swiss Ephemeris data files; without them the built-in Moshier ephemeris is used (about 1″ for planets) |
