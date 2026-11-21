@@ -1,6 +1,7 @@
-# Deploying Saarthi Core API
+# Deploying Saarthi
 
-Staging runs on a Hostinger VPS at **https://srv1925899.hstgr.cloud**.
+Staging runs on a Hostinger VPS at **https://srv1925899.hstgr.cloud**: the web app at `/`,
+the API under `/api` and `/auth` on the same address.
 
 ## The server
 
@@ -9,7 +10,9 @@ Staging runs on a Hostinger VPS at **https://srv1925899.hstgr.cloud**.
 | Host | `srv1925899.hstgr.cloud` (89.116.122.176), AlmaLinux 10 |
 | App | `/home/saarthi/app`, owned by the `saarthi` user, built to `dist/` |
 | Process | systemd unit `saarthi-api` running `node dist/server.js` on port 4100 (not reachable from outside; the firewall blocks it) |
-| Proxy | nginx (`/etc/nginx/conf.d/saarthi-api.conf`) → port 4100; HTTPS from Let's Encrypt, renewed by `certbot-renew.timer` |
+| Web app | `web/` built to `/var/www/saarthi` (static files); unknown paths fall back to `index.html` |
+| Proxy | nginx (`/etc/nginx/conf.d/saarthi-api.conf`): `/api/*` and `/auth/*` → port 4100, everything else → the web app; HTTPS from Let's Encrypt, renewed by `certbot-renew.timer` |
+| Health | `https://srv1925899.hstgr.cloud/api/health` |
 | Database | MariaDB 10.11, database `saarthi_staging`, user `saarthi_app`, listening on 127.0.0.1 only |
 | Firewall | firewalld: only ssh, http, https are open |
 | Config | `/home/saarthi/app/.env` (mode 600): `DATABASE_URL`, `JWT_SECRET`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `PORT`, `ENABLE_DEV_ROUTES=false` |
@@ -19,19 +22,29 @@ Changing `JWT_SECRET` signs everyone out.
 
 ## Redeploy
 
-Push your branch to GitHub, then on the server:
+Push your branch to GitHub, then on the server run the deploy script. It pulls, installs,
+applies migrations, builds the API and the web app, publishes the web build and restarts
+the API:
 
 ```bash
 ssh root@srv1925899.hstgr.cloud
-cd /home/saarthi/app
-sudo -u saarthi git pull
-sudo -u saarthi -H bash -lc "cd /home/saarthi/app && npm ci && npx prisma generate && npx prisma migrate deploy && npm run build"
-systemctl restart saarthi-api
-curl -s https://srv1925899.hstgr.cloud/
+bash /home/saarthi/app/deploy.sh
 ```
 
 The server tracks the `companion-chat` branch. To follow another branch:
-`sudo -u saarthi git checkout -B main origin/main`.
+`sudo -u saarthi git -C /home/saarthi/app checkout -B main origin/main`.
+
+## Working on the web app locally
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Vite serves it at http://localhost:5173 and proxies `/api` and `/auth` to the staging
+server, so you can sign in with a real staging account. Set `VITE_API_TARGET=http://localhost:4100`
+to use a local API instead.
 
 ## Everyday commands
 
