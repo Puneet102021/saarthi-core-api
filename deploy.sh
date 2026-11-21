@@ -20,6 +20,7 @@ echo "==> Web: install, build"
 as_app "cd web && npm ci --no-audit --no-fund && npm run build"
 
 echo "==> Publishing web build"
+mkdir -p "$(dirname "$WEB_ROOT")"
 rm -rf "$WEB_ROOT.new"
 cp -r "$APP/web/dist" "$WEB_ROOT.new"
 chmod -R a+rX "$WEB_ROOT.new"
