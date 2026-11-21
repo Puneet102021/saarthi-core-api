@@ -17,6 +17,9 @@ from "./routes/onboarding.routes";
 import askRoutes
 from "./routes/ask.routes";
 
+import conversationRoutes
+from "./routes/conversation.routes";
+
 import {
   devRoutesEnabled
 } from "./routes/devRoutes";
@@ -59,6 +62,11 @@ app.use(
 app.use(
   "/api/ask",
   askRoutes
+);
+
+app.use(
+  "/api/conversations",
+  conversationRoutes
 );
 
 app.get(

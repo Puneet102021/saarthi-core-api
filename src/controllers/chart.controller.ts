@@ -6,6 +6,7 @@ import { transitSnapshot } from "../astrology/transits";
 import type { BirthInput, NatalChart } from "../astrology/types";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { getUserChart, ProfileIncompleteError } from "../services/chartService";
+import { NotFoundError } from "../services/conversationService";
 
 export class BadRequestError extends Error {}
 
@@ -62,6 +63,10 @@ export function chartView(chart: NatalChart, now = new Date()) {
 }
 
 export function sendError(res: Response, error: unknown, tag: string) {
+  if (error instanceof NotFoundError) {
+    return res.status(404).json({ success: false, error: error.message });
+  }
+
   if (error instanceof BadRequestError || error instanceof ProfileIncompleteError) {
     return res.status(400).json({ success: false, error: error.message });
   }

@@ -3,6 +3,7 @@ import type { UserProfile } from "@prisma/client";
 import { buildNatalChart, ENGINE_VERSION } from "../astrology/chart";
 import type { BirthInput, NatalChart } from "../astrology/types";
 import { prisma } from "../lib/prisma";
+import { PersonProfile, profileFromUserProfile } from "../reading/profile";
 
 export class ProfileIncompleteError extends Error {}
 
@@ -39,7 +40,9 @@ interface StoredChart {
   The natal chart is computed once and kept in UserChart. It is rebuilt when
   the birth details change or the engine version moves on.
 */
-export async function getUserChart(userId: string): Promise<{ chart: NatalChart; name: string | null }> {
+export async function getUserChart(
+  userId: string
+): Promise<{ chart: NatalChart; name: string | null; profile: PersonProfile }> {
   const profile = await prisma.userProfile.findUnique({ where: { userId } });
 
   if (!profile) {
@@ -56,7 +59,7 @@ export async function getUserChart(userId: string): Promise<{ chart: NatalChart;
     data.engineVersion === ENGINE_VERSION &&
     JSON.stringify(data.input) === JSON.stringify(input)
   ) {
-    return { chart: data.chart, name: profile.fullName };
+    return { chart: data.chart, name: profile.fullName, profile: profileFromUserProfile(profile) };
   }
 
   const chart = buildNatalChart(input);
@@ -68,5 +71,5 @@ export async function getUserChart(userId: string): Promise<{ chart: NatalChart;
     create: { userId, chartData }
   });
 
-  return { chart, name: profile.fullName };
+  return { chart, name: profile.fullName, profile: profileFromUserProfile(profile) };
 }

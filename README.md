@@ -1,26 +1,35 @@
 # Saarthi Core API
 
-A user asks a question; the API reads their Vedic birth chart for what bears on
-that question, and a language model answers from that evidence.
+Saarthi is a companion people can talk to about what is going on in their lives. It reads
+their Vedic birth chart for what bears on the message, uses everyday psychology to support
+them, and offers simple, free remedies when things are hard. A language model writes the
+reply, but only from the evidence and remedy options the engine hands it.
 
 ```
-question ─► intent ─► relevance map ─► chart evidence ─┐
-                                       timing evidence ─┼─► rank & trim ─► model ─► cited answer
-             stored natal chart (built once at onboarding)
+message ─► need & intent ─► relevance map ─► chart / daily evidence ─┐
+                                              timing evidence ───────┼─► rank & trim ─► remedies ─► model ─► cited reply
+  onboarding profile ─────────────────────────────────────────────────┘
+  stored natal chart (built once at onboarding)          saved conversation history
 ```
 
 ## Endpoints
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `POST /api/ask` | Bearer | `{ question, history? }` → `{ answer, evidenceUsed, evidence, followUps, intent, currentPeriod }` |
+| `POST /api/ask` | Bearer | `{ message, conversationId? }` → `{ conversationId, answer, need, evidenceUsed, evidence, remedies, followUps, intent, currentPeriod }` |
+| `GET /api/conversations` | Bearer | The user's conversations, newest first |
+| `GET /api/conversations/:id` | Bearer | One conversation's messages; assistant turns carry `meta` (need, cited evidence, remedies) |
+| `DELETE /api/conversations/:id` | Bearer | Deletes a conversation and its messages |
 | `GET /api/chart` | Bearer | The user's natal chart, running dasha and current transits |
 | `POST /api/chart/preview` | none, dev only | `{ birth }` → chart |
-| `POST /api/ask/preview` | none, dev only | `{ birth, question, history?, dryRun?, now? }` → answer plus the full brief and prompt |
+| `POST /api/ask/preview` | none, dev only | `{ birth, message, history?, profile?, dryRun?, now? }` → answer plus the full brief, remedy options and prompt |
 
 `birth` is `{ date: "YYYY-MM-DD", time: "HH:mm" | null, timezone: "Asia/Kolkata", latitude, longitude }`,
 or `utcOffsetMinutes` in place of `timezone` (e.g. for local mean time).
-`history` is the earlier turns, `[{ role: "user" | "assistant", content }]`.
+Without `conversationId`, `/api/ask` starts a new conversation and returns its id; pass it on
+later messages and the history is read from the database. `question` is still accepted in place
+of `message`, and `history` (`[{ role: "user" | "assistant", content }]`) still seeds a new
+conversation for older clients. Messages are capped at 2,000 characters.
 
 The preview routes exist only when `ENABLE_DEV_ROUTES=true`. Never set it in production.
 
@@ -67,6 +76,23 @@ are rebuilt.
 
 ## Answering (`src/reading`)
 
+- **The need is inferred, never chosen.** `intent.ts` reads each message, with the recent
+  turns and the onboarding `entryReason` as hints, and settles what the person needs right now:
+  `support` (venting, wants to be heard), `guidance` (how to go forward on a matter),
+  `support_guidance` (both), `daily` (a routine check-in) or `optimise` (making the most of a
+  good time). It also flags `wantsRemedies` and `distress`. A conversation can move between
+  needs from one message to the next.
+- The need sets the evidence and its budget: support gets the mind (Moon, 4th) and the current
+  period only, so a struggle is framed as a passing phase rather than a reading; daily gets
+  `daily.ts` (today's Moon from the natal Moon, chandra bala, and tara bala); optimise favours
+  what is supportive now.
+- `profile.ts` turns the onboarding answers (focus, how they handle pressure, what they feel
+  misunderstood for, why they came) into an `ABOUT THE PERSON` block that shapes tone, never chart
+  facts.
+- `remedies.ts` is the remedy catalogue: practical, psychological and optional traditional
+  practices for each planet, plus general ones. They are offered when the person is struggling,
+  asks, or the evidence is mostly challenging; framed as "strengthen" in good times; at most one
+  on a difficult day. No gemstones, paid rituals or purchases. Tune remedies here.
 - `domains.ts` is the relevance map: for each life area, its primary and secondary houses,
   natural significators and divisional chart. Tune readings here first.
 - `intent.ts` reads the question (life areas, question type, time window, sensitivity), with
@@ -75,8 +101,11 @@ are rebuilt.
   lords, significators, divisional chart, yogas; running and upcoming dasha periods tied to the
   question's houses; transits.
 - `rank.ts` keeps the strongest 15 or so, weighted towards timing for "when" questions.
-- `prompt.ts` holds the instructions. The model may interpret the evidence but not add chart
-  facts or dates; citations to evidence it was not given are stripped.
+- `prompt.ts` holds the instructions: acknowledge first, then meet the need; chart as weather,
+  not fate. The model may interpret the evidence but not add chart facts or dates, and may only
+  suggest remedies it was offered; citations ([E#], [R#]) to anything it was not given are
+  stripped.
+- Messages that show distress get grounding first and a gentle pointer to Tele-MANAS (14416).
 - Questions that hint at self-harm get a support message with helplines, never a reading.
 
 ## Tests

@@ -57,7 +57,7 @@ export function connectionTo(p: PlanetInfo, domains: DomainId[]): Connection {
   return { score: Math.min(score, 2), reasons };
 }
 
-function lordPolarity(p: PlanetInfo): Polarity {
+export function lordPolarity(p: PlanetInfo): Polarity {
   const good = p.functionalNature === "yogakaraka" || p.functionalNature === "benefic";
   const bad = p.functionalNature === "malefic";
 

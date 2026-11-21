@@ -67,9 +67,10 @@ export function nakshatraOf(longitude: number): {
 }
 
 export function ordinal(n: number): string {
-  if (n === 1) return "1st";
-  if (n === 2) return "2nd";
-  if (n === 3) return "3rd";
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  if (!teen && n % 10 === 1) return `${n}st`;
+  if (!teen && n % 10 === 2) return `${n}nd`;
+  if (!teen && n % 10 === 3) return `${n}rd`;
   return `${n}th`;
 }
 
