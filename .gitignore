@@ -10,3 +10,6 @@ logs
 .env
 
 /src/generated/prisma
+
+# Web app build info
+*.tsbuildinfo

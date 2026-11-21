@@ -162,3 +162,53 @@ export const submitOnboarding = async (
     });
   }
 };
+/* The signed-in user's onboarding answers, so the app can route and prefill the profile page. */
+export const getOnboarding = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true,
+        onboardingCompleted: true,
+        profile: {
+          select: {
+            fullName: true,
+            birthDate: true,
+            birthTime: true,
+            birthTimeKnown: true,
+            birthPlace: true,
+            locationId: true,
+            primaryFocus: true,
+            secondaryFocus: true,
+            pressureResponse: true,
+            misunderstoodFor: true,
+            entryReason: true,
+            entryQuestion: true,
+            location: { select: { id: true, name: true, state: true } }
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    const profile = user.profile
+      ? { ...user.profile, birthDate: user.profile.birthDate?.toISOString().slice(0, 10) ?? null }
+      : null;
+
+    res.json({ success: true, data: { email: user.email, onboardingCompleted: user.onboardingCompleted, profile } });
+  } catch (error) {
+    console.error("ONBOARDING_GET_ERROR", error);
+    res.status(500).json({ success: false, message: "Failed to load profile" });
+  }
+};
