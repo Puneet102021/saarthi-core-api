@@ -59,6 +59,13 @@ export function AssistantMessage({
   const [showWhy, setShowWhy] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
 
+  /* Number chart factors in the order the reply mentions them; uncited ones go last. */
+  const mentioned = [...content.matchAll(/E\d+/g)].map((m) => m[0]);
+  const rank = (id: string) => {
+    const i = mentioned.indexOf(id);
+    return i === -1 ? Infinity : i;
+  };
+  evidence = [...evidence].sort((a, b) => rank(a.id) - rank(b.id));
   const evidenceIndex = new Map(evidence.map((e, i) => [e.id, i + 1]));
   const remedyIndex = new Map(remedies.map((r, i) => [r.ref, i + 1]));
 
