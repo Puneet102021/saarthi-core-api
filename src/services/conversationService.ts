@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
 
-import type { ChatMessage } from "../lib/llm";
 import { prisma } from "../lib/prisma";
 
 /*
@@ -16,29 +15,6 @@ export class NotFoundError extends Error {}
 export async function getOrCreateThread(userId: string) {
   const latest = await prisma.conversation.findFirst({ where: { userId }, orderBy: { updatedAt: "desc" } });
   return latest ?? prisma.conversation.create({ data: { userId, title: "Saarthi" } });
-}
-
-/* The last turns, oldest first, for the model; and when the person last wrote. */
-export async function recentHistory(
-  userId: string,
-  limit = 8
-): Promise<{ history: ChatMessage[]; lastMessageAt: Date | null }> {
-  const rows = await prisma.message.findMany({
-    where: { conversation: { userId } },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    select: { role: true, content: true, createdAt: true }
-  });
-
-  const lastUser = rows.find((m) => m.role === "user");
-
-  return {
-    history: rows
-      .reverse()
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    lastMessageAt: lastUser?.createdAt ?? rows[rows.length - 1]?.createdAt ?? null
-  };
 }
 
 export async function appendTurn(

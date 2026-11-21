@@ -9,6 +9,7 @@ import ChartPage from "./pages/ChartPage";
 import ChatPage from "./pages/ChatPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import ProfilePage from "./pages/ProfilePage";
+import SettingsPage from "./pages/SettingsPage";
 
 function Loading() {
   return (
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/" element={<ChatPage />} />
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

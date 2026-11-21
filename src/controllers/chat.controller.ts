@@ -1,6 +1,7 @@
 import { Response } from "express";
 
 import { AuthRequest } from "../middleware/auth.middleware";
+import { clearRunningMemory } from "../memory/store";
 import { clearHistory, listMessages } from "../services/conversationService";
 import { BadRequestError, sendError } from "./chart.controller";
 
@@ -24,6 +25,8 @@ export async function history(req: AuthRequest, res: Response) {
 export async function clear(req: AuthRequest, res: Response) {
   try {
     await clearHistory(req.user!.userId);
+    /* The running summary describes the chat, so it goes with it; long-term notes stay until forgotten. */
+    await clearRunningMemory(req.user!.userId);
     return res.json({ success: true });
   } catch (error) {
     return sendError(res, error, "CHAT_CLEAR_ERROR");

@@ -1,13 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
 
-import { useAuth } from "../auth";
 import { Brand } from "./Brand";
 import { Icon } from "./Icon";
 
 /* One continuous chat, so no thread list: a slim top bar with the few places there are. */
 export default function AppShell() {
-  const { signOut } = useAuth();
-
   return (
     <div className="shell">
       <header className="topbar">
@@ -27,10 +24,10 @@ export default function AppShell() {
             <Icon name="user" size={17} />
             <span>Profile</span>
           </NavLink>
-          <button className="topnav-link" onClick={signOut}>
-            <Icon name="out" size={17} />
-            <span>Sign out</span>
-          </button>
+          <NavLink to="/settings" className="topnav-link">
+            <Icon name="settings" size={17} />
+            <span>Settings</span>
+          </NavLink>
         </nav>
       </header>
       <main className="main">

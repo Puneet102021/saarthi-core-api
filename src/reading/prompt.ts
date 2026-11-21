@@ -3,6 +3,7 @@ import type { NatalChart } from "../astrology/types";
 import { DOMAINS } from "./domains";
 import type { Evidence } from "./evidence";
 import type { Need, QuestionIntent } from "./intent";
+import { Memory, memoryBlock } from "../memory/core";
 import { PersonProfile, profileBlock } from "./profile";
 import type { OfferedRemedy } from "./remedies";
 
@@ -31,6 +32,10 @@ One continuous conversation
 - There are no separate chats: this is one ongoing conversation with the person, like messaging a friend over weeks and months. The earlier messages you see are part of it.
 - When the brief says they are back after a while, greet them naturally ("good to hear from you again") and, where it helps, connect to what they shared before. Do not recap the whole history.
 - Keep follow-ups conversational. Do not repeat a full reading of things you already explained unless they ask.
+
+Memory
+- The brief may include what you remember about them (long-term notes) and where your conversation has been lately (a running summary); the latest messages follow in full. Use them the way a caring friend would: remember names, ask how the interview went once its date has passed, notice when something keeps coming back, build on what helped before.
+- Weave memory in lightly and only when it is relevant. Never recite it, never say "according to my notes", and never mention how your memory works. If what they say now differs from memory, go with what they say now.
 
 First readings
 - When the brief says FIRST READING, the conversation is turning to something new (their first message, a new topic, or a return after a while): give a full, structured reading in the order the brief sets out, with short, warm markdown headings (### ...). It replaces the word limits above.
@@ -129,7 +134,8 @@ export function buildUserMessage({
   now,
   profile,
   firstReading = false,
-  hoursAway = null
+  hoursAway = null,
+  memory
 }: {
   chart: NatalChart;
   question: string;
@@ -140,6 +146,7 @@ export function buildUserMessage({
   profile?: PersonProfile;
   firstReading?: boolean;
   hoursAway?: number | null;
+  memory?: Memory;
 }): string {
   const running = dashaAt(chart.dasha.mahadashas, now);
 
@@ -170,6 +177,7 @@ export function buildUserMessage({
     : null;
 
   const about = profileBlock(profile);
+  const remembered = memoryBlock(memory);
 
   const away =
     hoursAway === null || hoursAway < 12
@@ -184,6 +192,7 @@ export function buildUserMessage({
     sensitivity,
     away,
     about ? `\n${about}` : null,
+    remembered ? `\n${remembered}` : null,
     "",
     "EVIDENCE BRIEF",
     evidence.map(evidenceLine).join("\n\n"),

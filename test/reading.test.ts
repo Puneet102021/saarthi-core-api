@@ -280,3 +280,23 @@ describe("one continuous chat", () => {
     assert.match(result.prompt!.system, /no separate chats/);
   });
 });
+
+describe("memory in the brief", () => {
+  it("puts long-term notes and the running summary in the prompt", async () => {
+    const result = await askQuestion({
+      chart,
+      question: "Feeling a bit nervous today",
+      history: earlier,
+      now,
+      dryRun: true,
+      memory: {
+        running: "They have been preparing for an interview and feeling anxious.",
+        facts: [{ id: "f1", category: "event", text: "Job interview at City Hospital", eventDate: "2026-10-23", importance: 3 }]
+      }
+    });
+    assert.match(result.prompt!.user, /WHAT YOU REMEMBER ABOUT THEM/);
+    assert.match(result.prompt!.user, /Job interview at City Hospital \(2026-10-23\)/);
+    assert.match(result.prompt!.user, /preparing for an interview/);
+    assert.match(result.prompt!.system, /caring friend would/);
+  });
+});

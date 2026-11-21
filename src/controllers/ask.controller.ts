@@ -6,7 +6,8 @@ import { AuthRequest } from "../middleware/auth.middleware";
 import { askQuestion } from "../reading/ask";
 import { normaliseProfile } from "../reading/profile";
 import { getUserChart } from "../services/chartService";
-import { appendTurn, getOrCreateThread, recentHistory } from "../services/conversationService";
+import { loadMemory, scheduleMemoryUpdate, shortTermHistory } from "../memory/store";
+import { appendTurn, getOrCreateThread } from "../services/conversationService";
 import { BadRequestError, parseBirthInput, sendError } from "./chart.controller";
 
 const MAX_MESSAGE = 2000;
@@ -59,9 +60,12 @@ export async function ask(req: AuthRequest, res: Response) {
     const userId = req.user!.userId;
     const { chart, profile } = await getUserChart(userId);
     const thread = await getOrCreateThread(userId);
-    const { history, lastMessageAt } = await recentHistory(userId);
 
-    const result = await askQuestion({ chart, question: message, history, profile, lastMessageAt });
+    /* Long-term notes and the running summary, then the recent messages word for word. */
+    const memory = await loadMemory(userId);
+    const { history, lastMessageAt } = await shortTermHistory(userId, memory.runningThrough);
+
+    const result = await askQuestion({ chart, question: message, history, profile, lastMessageAt, memory });
     const data = publicResult(result, false);
 
     try {
@@ -78,6 +82,8 @@ export async function ask(req: AuthRequest, res: Response) {
       };
       /* Plain JSON for the Json column (drops undefined values). */
       await appendTurn(thread.id, message, result.answer ?? "", JSON.parse(JSON.stringify(meta)));
+      /* Fold older messages into memory in the background; the reply does not wait. */
+      scheduleMemoryUpdate(userId);
     } catch (saveError) {
       /* The person still gets their answer; the chat just misses this turn. */
       console.error("CHAT_SAVE_ERROR", saveError);
@@ -105,7 +111,17 @@ export async function previewAsk(req: Request, res: Response) {
     const lastMessageAt = req.body?.lastMessageAt ? new Date(req.body.lastMessageAt) : null;
     if (lastMessageAt && Number.isNaN(lastMessageAt.getTime())) throw new BadRequestError("lastMessageAt must be an ISO date");
 
-    const result = await askQuestion({ chart, question: message, history, dryRun, now, profile, lastMessageAt });
+    /* Optional memory for previews: { running, facts: [{ category, text, eventDate, importance }] }. */
+    const memory = req.body?.memory
+      ? {
+          running: typeof req.body.memory.running === "string" ? req.body.memory.running : null,
+          facts: Array.isArray(req.body.memory.facts)
+            ? req.body.memory.facts.map((f: any, i: number) => ({ id: `p${i}`, ...f }))
+            : []
+        }
+      : undefined;
+
+    const result = await askQuestion({ chart, question: message, history, dryRun, now, profile, lastMessageAt, memory });
 
     return res.json({ success: true, data: publicResult(result, true) });
   } catch (error) {

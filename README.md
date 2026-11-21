@@ -20,6 +20,11 @@ message ─► need & intent ─► relevance map ─► chart / daily evidence 
 | `GET /api/conversations` | Bearer | The user's conversations, newest first |
 | `GET /api/conversations/:id` | Bearer | One conversation's messages; assistant turns carry `meta` (need, cited evidence, remedies) |
 | `DELETE /api/conversations/:id` | Bearer | Deletes a conversation and its messages |
+| `GET /api/chat` | Bearer | `?before=<ISO>&limit=30`: a page of the person's one continuous chat |
+| `DELETE /api/chat` | Bearer | Deletes the chat and its running summary |
+| `GET /api/memory` | Bearer | What Saarthi remembers: long-term notes and the running summary |
+| `DELETE /api/memory/facts/:id` | Bearer | Forgets one note |
+| `DELETE /api/memory` | Bearer | Forgets everything (the chat stays) |
 | `GET /api/chart` | Bearer | The user's natal chart, running dasha and current transits |
 | `POST /api/chart/preview` | none, dev only | `{ birth }` → chart |
 | `POST /api/ask/preview` | none, dev only | `{ birth, message, history?, profile?, dryRun?, now? }` → answer plus the full brief, remedy options and prompt |
@@ -40,6 +45,7 @@ The preview routes exist only when `ENABLE_DEV_ROUTES=true`. Never set it in pro
 | `OPENAI_API_KEY` | | required for `/api/ask` |
 | `OPENAI_MODEL` | `gpt-5.4-mini` | writes the answer; reasoning models (o-series, GPT-5 and later) are detected automatically |
 | `OPENAI_INTENT_MODEL` | `gpt-4o-mini` | reads the message (need, life areas, timing); keep it small and fast |
+| `OPENAI_MEMORY_MODEL` | `gpt-4.1-mini` | keeps Saarthi's running summary and long-term notes, after replies |
 | `OPENAI_REASONING_EFFORT` | `low` | `minimal`, `low`, `medium` or `high`, for reasoning answer models |
 | `AYANAMSA` | `lahiri` | `lahiri`, `raman` or `kp` |
 | `NODE_TYPE` | `true` | `true` or `mean` node for Rahu/Ketu |
@@ -108,6 +114,22 @@ are rebuilt.
   stripped.
 - Messages that show distress get grounding first and a gentle pointer to Tele-MANAS (14416).
 - Questions that hint at self-harm get a support message with helplines, never a reading.
+
+## Memory (`src/memory`)
+
+Saarthi remembers in three layers, like a friend would:
+
+- **Short-term:** the latest messages, word for word (at least 12).
+- **Running:** a short summary of what has been talked about lately. Once four or more
+  messages have left the short-term window, they are folded into it in the background,
+  after the reply is sent.
+- **Long-term:** lasting notes about the person (people, work, life, events with dates,
+  patterns, what helps, goals, preferences), added, updated and removed by the same step.
+  Never contact details, numbers or astrology. People can see and delete them under
+  Settings.
+
+`core.ts` is the pure logic (what to fold, validating note changes, how memory reads in
+the brief); `store.ts` does the database and model calls.
 
 ## Tests
 

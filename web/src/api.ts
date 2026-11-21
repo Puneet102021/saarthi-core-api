@@ -155,6 +155,22 @@ export interface ChatPage {
   hasMore: boolean;
 }
 
+export type FactCategory = "people" | "work" | "life" | "event" | "pattern" | "helps" | "goal" | "preference";
+
+export interface MemoryFact {
+  id: string;
+  category: FactCategory;
+  text: string;
+  eventDate: string | null;
+  importance: 1 | 2 | 3;
+  updatedAt: string | null;
+}
+
+export interface MemoryView {
+  running: string | null;
+  facts: MemoryFact[];
+}
+
 export interface DashaPeriod {
   lord: string;
   start: string;
@@ -220,6 +236,10 @@ export const api = {
   chat: (before?: string) =>
     request<{ data: ChatPage }>("GET", `/api/chat${before ? `?before=${encodeURIComponent(before)}` : ""}`).then((r) => r.data),
   clearChat: () => request<{ success: true }>("DELETE", "/api/chat"),
+
+  memory: () => request<{ data: MemoryView }>("GET", "/api/memory").then((r) => r.data),
+  forgetFact: (id: string) => request<{ success: true }>("DELETE", `/api/memory/facts/${encodeURIComponent(id)}`),
+  forgetMemory: () => request<{ success: true }>("DELETE", "/api/memory"),
 
   chart: () => request<{ data: ChartView }>("GET", "/api/chart").then((r) => r.data)
 };

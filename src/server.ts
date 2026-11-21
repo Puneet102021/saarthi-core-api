@@ -20,6 +20,9 @@ from "./routes/ask.routes";
 import chatRoutes
 from "./routes/chat.routes";
 
+import memoryRoutes
+from "./routes/memory.routes";
+
 import {
   devRoutesEnabled
 } from "./routes/devRoutes";
@@ -67,6 +70,11 @@ app.use(
 app.use(
   "/api/chat",
   chatRoutes
+);
+
+app.use(
+  "/api/memory",
+  memoryRoutes
 );
 
 app.get(

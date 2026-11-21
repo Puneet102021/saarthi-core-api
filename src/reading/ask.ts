@@ -6,6 +6,7 @@ import type { DomainId } from "./domains";
 import { natalEvidence } from "./evidence";
 import type { Evidence } from "./evidence";
 import { classifyQuestion, keywordIntent, Need, QuestionIntent } from "./intent";
+import type { Memory } from "../memory/core";
 import type { PersonProfile } from "./profile";
 import { ANSWER_SCHEMA, buildUserMessage, SYSTEM_PROMPT } from "./prompt";
 import { rankEvidence } from "./rank";
@@ -18,6 +19,8 @@ export interface AskInput {
   /* Earlier turns of this conversation, oldest first. */
   history?: ChatMessage[];
   profile?: PersonProfile;
+  /* Long-term notes and running summary (short-term memory is `history`). */
+  memory?: Memory;
   /* When the person last wrote, for noticing they are back after a gap. */
   lastMessageAt?: Date | null;
   now?: Date;
@@ -180,7 +183,8 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
     now,
     profile: input.profile,
     firstReading,
-    hoursAway
+    hoursAway,
+    memory: input.memory
   });
 
   if (input.dryRun) {
