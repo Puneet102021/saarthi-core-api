@@ -17,9 +17,6 @@ message ─► need & intent ─► relevance map ─► chart / daily evidence 
 | Route | Auth | Purpose |
 | --- | --- | --- |
 | `POST /api/ask` | Bearer | `{ message, conversationId? }` → `{ conversationId, answer, need, evidenceUsed, evidence, remedies, followUps, intent, currentPeriod }` |
-| `GET /api/conversations` | Bearer | The user's conversations, newest first |
-| `GET /api/conversations/:id` | Bearer | One conversation's messages; assistant turns carry `meta` (need, cited evidence, remedies) |
-| `DELETE /api/conversations/:id` | Bearer | Deletes a conversation and its messages |
 | `GET /api/chat` | Bearer | `?before=<ISO>&limit=30`: a page of the person's one continuous chat |
 | `DELETE /api/chat` | Bearer | Deletes the chat and its running summary |
 | `GET /api/memory` | Bearer | What Saarthi remembers: long-term notes and the running summary |
@@ -27,7 +24,7 @@ message ─► need & intent ─► relevance map ─► chart / daily evidence 
 | `DELETE /api/memory` | Bearer | Forgets everything (the chat stays) |
 | `GET /api/chart` | Bearer | The user's natal chart, running dasha and current transits |
 | `POST /api/chart/preview` | none, dev only | `{ birth }` → chart |
-| `POST /api/ask/preview` | none, dev only | `{ birth, message, history?, profile?, dryRun?, now? }` → answer plus the full brief, remedy options and prompt |
+| `POST /api/ask/preview` | none, dev only | `{ birth, message, history?, profile?, memory?, lastMessageAt?, dryRun?, now? }` → answer plus the full brief, remedy options and prompt |
 
 `birth` is `{ date: "YYYY-MM-DD", time: "HH:mm" | null, timezone: "Asia/Kolkata", latitude, longitude }`,
 or `utcOffsetMinutes` in place of `timezone` (e.g. for local mean time).
@@ -142,3 +139,4 @@ ascendant = tropical − ayanamsa), widely published Gochar dates (Saturn into P
 29 Mar 2025, Jupiter into Gemini 14 May 2025), a reference chart (M. K. Gandhi), dasha and
 divisional-chart arithmetic, dignities, functional natures, yoga rules and the question
 pipeline. They run without a database or an API key.
+
