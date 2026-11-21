@@ -235,17 +235,30 @@ describe("first reading", () => {
 });
 
 describe("one continuous chat", () => {
-  it("gives a full reading again when they come back after a gap", async () => {
+  it("gives a full reading again when they come back after a week or more", async () => {
     const result = await askQuestion({
       chart,
       question: "I'm exhausted, nothing works out for me",
       history: earlier,
-      lastMessageAt: new Date(now.getTime() - 3 * 24 * 3600 * 1000),
+      lastMessageAt: new Date(now.getTime() - 9 * 24 * 3600 * 1000),
       now,
       dryRun: true
     });
     assert.equal(result.firstReading, true);
     assert.match(result.prompt!.user, /FIRST READING/);
+    assert.match(result.prompt!.user, /back after about 9 days/);
+  });
+
+  it("welcomes them back after a few days but keeps the conversation going", async () => {
+    const result = await askQuestion({
+      chart,
+      question: "Things with my sister are a bit better now",
+      history: earlier,
+      lastMessageAt: new Date(now.getTime() - 3 * 24 * 3600 * 1000),
+      now,
+      dryRun: true
+    });
+    assert.equal(result.firstReading, false);
     assert.match(result.prompt!.user, /back after about 3 days/);
   });
 

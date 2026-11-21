@@ -43,8 +43,12 @@ export interface AskResult {
   prompt?: { system: string; user: string };
 }
 
-/* Coming back after this many hours counts as a fresh start for a full reading. */
-const RETURN_AFTER_HOURS = 12;
+/*
+  Coming back after a week or more counts as a fresh start for a full
+  reading: the periods may have moved on. Shorter gaps get a warm "you're
+  back" and the conversation simply continues.
+*/
+const RETURN_AFTER_HOURS = 7 * 24;
 
 /* Shown instead of a reading when a message signals self-harm. */
 export const SELF_HARM_RESPONSE = `I'm really sorry you're feeling this way. You don't have to carry it alone, and this is more important than any chart.
@@ -156,7 +160,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
   /*
     One continuous chat, so a full, structured reading is given when the
     conversation turns to something new: the very first message, a new
-    topic, or a return after a long gap. Otherwise Saarthi keeps talking.
+    topic, or a return after a week or more. Otherwise Saarthi keeps talking.
   */
   const hoursAway = input.lastMessageAt ? (now.getTime() - input.lastMessageAt.getTime()) / 3_600_000 : null;
   const firstReading =
