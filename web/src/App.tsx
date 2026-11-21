@@ -57,7 +57,6 @@ export default function App() {
         }
       >
         <Route path="/" element={<ChatPage />} />
-        <Route path="/c/:id" element={<ChatPage />} />
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Route>

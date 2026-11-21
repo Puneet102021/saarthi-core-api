@@ -3,40 +3,42 @@ import type { Prisma } from "@prisma/client";
 import type { ChatMessage } from "../lib/llm";
 import { prisma } from "../lib/prisma";
 
+/*
+  Each person has one continuous chat with Saarthi, like talking to a friend:
+  no threads to start, name or archive. Messages are stored under a
+  Conversation row; the stream is every message the person has ever sent,
+  across rows, so chats from before the single-stream change merge in.
+*/
+
 export class NotFoundError extends Error {}
 
-const TITLE_LENGTH = 60;
-
-function titleFrom(message: string): string {
-  const text = message.replace(/\s+/g, " ").trim();
-  return text.length > TITLE_LENGTH ? `${text.slice(0, TITLE_LENGTH - 1).trimEnd()}…` : text;
+/* The row new messages are written to: the person's most recent one, or a new one. */
+export async function getOrCreateThread(userId: string) {
+  const latest = await prisma.conversation.findFirst({ where: { userId }, orderBy: { updatedAt: "desc" } });
+  return latest ?? prisma.conversation.create({ data: { userId, title: "Saarthi" } });
 }
 
-/* A conversation the user owns; someone else's id is reported as not found. */
-async function ownedConversation(userId: string, conversationId: string) {
-  const conversation = await prisma.conversation.findFirst({ where: { id: conversationId, userId } });
-  if (!conversation) throw new NotFoundError("Conversation not found");
-  return conversation;
-}
-
-export async function getOrCreateConversation(userId: string, conversationId: string | undefined, firstMessage: string) {
-  if (conversationId) return ownedConversation(userId, conversationId);
-  return prisma.conversation.create({ data: { userId, title: titleFrom(firstMessage) } });
-}
-
-/* The last turns, oldest first, ready to hand to the model. */
-export async function recentHistory(conversationId: string, limit = 8): Promise<ChatMessage[]> {
+/* The last turns, oldest first, for the model; and when the person last wrote. */
+export async function recentHistory(
+  userId: string,
+  limit = 8
+): Promise<{ history: ChatMessage[]; lastMessageAt: Date | null }> {
   const rows = await prisma.message.findMany({
-    where: { conversationId },
+    where: { conversation: { userId } },
     orderBy: { createdAt: "desc" },
     take: limit,
-    select: { role: true, content: true }
+    select: { role: true, content: true, createdAt: true }
   });
 
-  return rows
-    .reverse()
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+  const lastUser = rows.find((m) => m.role === "user");
+
+  return {
+    history: rows
+      .reverse()
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    lastMessageAt: lastUser?.createdAt ?? rows[rows.length - 1]?.createdAt ?? null
+  };
 }
 
 export async function appendTurn(
@@ -59,28 +61,20 @@ export async function appendTurn(
   ]);
 }
 
-export function listConversations(userId: string) {
-  return prisma.conversation.findMany({
-    where: { userId },
-    orderBy: { updatedAt: "desc" },
-    take: 100,
-    select: { id: true, title: true, createdAt: true, updatedAt: true }
-  });
-}
-
-export async function getConversation(userId: string, conversationId: string) {
-  const conversation = await ownedConversation(userId, conversationId);
-
-  const messages = await prisma.message.findMany({
-    where: { conversationId },
-    orderBy: { createdAt: "asc" },
+/* A page of the person's chat, newest page first, returned oldest first; `before` pages further back. */
+export async function listMessages(userId: string, before: Date | undefined, limit: number) {
+  const rows = await prisma.message.findMany({
+    where: { conversation: { userId }, ...(before ? { createdAt: { lt: before } } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
     select: { id: true, role: true, content: true, meta: true, createdAt: true }
   });
 
-  return { ...conversation, messages };
+  return { messages: rows.slice(0, limit).reverse(), hasMore: rows.length > limit };
 }
 
-export async function deleteConversation(userId: string, conversationId: string): Promise<void> {
-  await ownedConversation(userId, conversationId);
-  await prisma.conversation.delete({ where: { id: conversationId } });
+/* Deletes every message the person has exchanged with Saarthi. */
+export async function clearHistory(userId: string): Promise<number> {
+  const { count } = await prisma.conversation.deleteMany({ where: { userId } });
+  return count;
 }

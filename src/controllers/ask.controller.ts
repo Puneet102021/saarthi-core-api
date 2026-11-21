@@ -6,7 +6,7 @@ import { AuthRequest } from "../middleware/auth.middleware";
 import { askQuestion } from "../reading/ask";
 import { normaliseProfile } from "../reading/profile";
 import { getUserChart } from "../services/chartService";
-import { appendTurn, getOrCreateConversation, recentHistory } from "../services/conversationService";
+import { appendTurn, getOrCreateThread, recentHistory } from "../services/conversationService";
 import { BadRequestError, parseBirthInput, sendError } from "./chart.controller";
 
 const MAX_MESSAGE = 2000;
@@ -14,7 +14,6 @@ const MAX_MESSAGE = 2000;
 interface ParsedAsk {
   message: string;
   history: ChatMessage[];
-  conversationId?: string;
 }
 
 /* `message` is the chat field; `question` is still accepted from older clients. */
@@ -25,9 +24,6 @@ export function parseAsk(body: any): ParsedAsk {
   if (!message) throw new BadRequestError("message is required");
   if (message.length > MAX_MESSAGE) throw new BadRequestError(`message must be at most ${MAX_MESSAGE} characters`);
 
-  const conversationId =
-    typeof body?.conversationId === "string" && body.conversationId.trim() ? body.conversationId.trim() : undefined;
-
   const rawHistory = Array.isArray(body?.history) ? body.history : [];
 
   /* Only user and assistant turns: a client must not be able to inject system instructions. */
@@ -36,7 +32,7 @@ export function parseAsk(body: any): ParsedAsk {
     .slice(-8)
     .map((m: any) => ({ role: m.role, content: m.content.slice(0, 4000) }));
 
-  return { message, history, conversationId };
+  return { message, history };
 }
 
 function publicResult(result: Awaited<ReturnType<typeof askQuestion>>, debug: boolean) {
@@ -51,9 +47,10 @@ function publicResult(result: Awaited<ReturnType<typeof askQuestion>>, debug: bo
   };
 }
 
+/* Each person has one continuous chat; the server keeps it, so the client sends only the new message. */
 export async function ask(req: AuthRequest, res: Response) {
   try {
-    const { message, history: clientHistory, conversationId } = parseAsk(req.body);
+    const { message } = parseAsk(req.body);
 
     if (!llmAvailable()) {
       return res.status(503).json({ success: false, error: "The answer model is not configured" });
@@ -61,17 +58,16 @@ export async function ask(req: AuthRequest, res: Response) {
 
     const userId = req.user!.userId;
     const { chart, profile } = await getUserChart(userId);
-    const conversation = await getOrCreateConversation(userId, conversationId, message);
+    const thread = await getOrCreateThread(userId);
+    const { history, lastMessageAt } = await recentHistory(userId);
 
-    /* A saved conversation is the source of truth; client history only seeds a new one. */
-    const history = conversationId ? await recentHistory(conversation.id) : clientHistory;
-
-    const result = await askQuestion({ chart, question: message, history, profile });
+    const result = await askQuestion({ chart, question: message, history, profile, lastMessageAt });
     const data = publicResult(result, false);
 
     try {
       const meta = {
         need: result.need,
+        firstReading: result.firstReading,
         intent: result.intent,
         evidenceUsed: result.evidenceUsed,
         evidence: data.evidence,
@@ -81,13 +77,13 @@ export async function ask(req: AuthRequest, res: Response) {
         model: result.model
       };
       /* Plain JSON for the Json column (drops undefined values). */
-      await appendTurn(conversation.id, message, result.answer ?? "", JSON.parse(JSON.stringify(meta)));
+      await appendTurn(thread.id, message, result.answer ?? "", JSON.parse(JSON.stringify(meta)));
     } catch (saveError) {
-      /* The person still gets their answer; the thread just misses this turn. */
-      console.error("CONVERSATION_SAVE_ERROR", saveError);
+      /* The person still gets their answer; the chat just misses this turn. */
+      console.error("CHAT_SAVE_ERROR", saveError);
     }
 
-    return res.json({ success: true, data: { conversationId: conversation.id, ...data } });
+    return res.json({ success: true, data });
   } catch (error) {
     return sendError(res, error, "ASK_ERROR");
   }
@@ -106,7 +102,10 @@ export async function previewAsk(req: Request, res: Response) {
 
     const profile = normaliseProfile({ name: req.body?.name, ...(req.body?.profile ?? {}) });
 
-    const result = await askQuestion({ chart, question: message, history, dryRun, now, profile });
+    const lastMessageAt = req.body?.lastMessageAt ? new Date(req.body.lastMessageAt) : null;
+    if (lastMessageAt && Number.isNaN(lastMessageAt.getTime())) throw new BadRequestError("lastMessageAt must be an ISO date");
+
+    const result = await askQuestion({ chart, question: message, history, dryRun, now, profile, lastMessageAt });
 
     return res.json({ success: true, data: publicResult(result, true) });
   } catch (error) {

@@ -27,8 +27,13 @@ Every reply
 - Luck and fate: the chart shows tendencies and timing, never a fixed fate. Effort, choices and the people around them change outcomes. Say so when someone feels unlucky or stuck.
 - Tailor to the person: use what they said about how they handle pressure and what they feel misunderstood for. For example, someone who withdraws under pressure might be nudged to reach out to one person. Never quote their profile back mechanically.
 
+One continuous conversation
+- There are no separate chats: this is one ongoing conversation with the person, like messaging a friend over weeks and months. The earlier messages you see are part of it.
+- When the brief says they are back after a while, greet them naturally ("good to hear from you again") and, where it helps, connect to what they shared before. Do not recap the whole history.
+- Keep follow-ups conversational. Do not repeat a full reading of things you already explained unless they ask.
+
 First readings
-- When the brief says FIRST READING, this is the opening reply of a conversation: give a full, structured reading in the order the brief sets out, with short, warm markdown headings (### ...). It replaces the word limits above.
+- When the brief says FIRST READING, the conversation is turning to something new (their first message, a new topic, or a return after a while): give a full, structured reading in the order the brief sets out, with short, warm markdown headings (### ...). It replaces the word limits above.
 - Explain the dasha system in plain words the first time: the mahadasha is a long chapter of several years ruled by one planet; the antardasha is the sub-chapter within it, ruled by another planet that colours the chapter; the pratyantardasha is the short phase of weeks or months that sets the tone right now. For each running period, say what its planet stands for in this chart (the houses it rules and sits in, from the brief) and how that tends to show up in daily life: mood, work, relationships, energy. Then say how the layers combine into what the person is living through.
 - Then look ahead: what comes next, when, and how it is likely to affect them, using only the upcoming periods, transits and dates in the brief. Be specific about dates and honest about tone, without fear: a harder phase ahead is something to prepare for, not dread.
 - Keep it human: every astrological point should lead back to their life and their message.
@@ -123,7 +128,8 @@ export function buildUserMessage({
   remedies = [],
   now,
   profile,
-  firstReading = false
+  firstReading = false,
+  hoursAway = null
 }: {
   chart: NatalChart;
   question: string;
@@ -133,6 +139,7 @@ export function buildUserMessage({
   now: Date;
   profile?: PersonProfile;
   firstReading?: boolean;
+  hoursAway?: number | null;
 }): string {
   const running = dashaAt(chart.dasha.mahadashas, now);
 
@@ -164,12 +171,18 @@ export function buildUserMessage({
 
   const about = profileBlock(profile);
 
+  const away =
+    hoursAway === null || hoursAway < 12
+      ? null
+      : `They are back after ${hoursAway < 48 ? `about ${Math.round(hoursAway)} hours` : `about ${Math.round(hoursAway / 24)} days`} since they last wrote.`;
+
   return [
     `Today: ${fmt(now.toISOString())}`,
     chartLines.join("\n"),
     `What they seem to need: ${NEED_LABEL[intent.need]}`,
     `Topic: ${focus} (${intent.questionType}); period: ${window}`,
     sensitivity,
+    away,
     about ? `\n${about}` : null,
     "",
     "EVIDENCE BRIEF",

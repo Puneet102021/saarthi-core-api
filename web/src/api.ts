@@ -127,20 +127,14 @@ export interface Remedy {
 export type Need = "support" | "guidance" | "support_guidance" | "daily" | "optimise";
 
 export interface AskResult {
-  conversationId: string;
   answer: string;
   need: Need;
+  firstReading: boolean;
   evidenceUsed: string[];
   evidence: Evidence[];
   remedies: Remedy[];
   followUps: string[];
   currentPeriod: string | null;
-}
-
-export interface ConversationSummary {
-  id: string;
-  title: string;
-  updatedAt: string;
 }
 
 export interface StoredMessage {
@@ -156,8 +150,9 @@ export interface StoredMessage {
   } | null;
 }
 
-export interface Conversation extends ConversationSummary {
+export interface ChatPage {
   messages: StoredMessage[];
+  hasMore: boolean;
 }
 
 export interface DashaPeriod {
@@ -219,13 +214,12 @@ export const api = {
 
   searchLocations: (q: string) => request<Location[]>("GET", `/api/locations/search?q=${encodeURIComponent(q)}`),
 
-  ask: (message: string, conversationId?: string) =>
-    request<{ data: AskResult }>("POST", "/api/ask", { message, conversationId }).then((r) => r.data),
+  ask: (message: string) => request<{ data: AskResult }>("POST", "/api/ask", { message }).then((r) => r.data),
 
-  conversations: () => request<{ data: ConversationSummary[] }>("GET", "/api/conversations").then((r) => r.data),
-  conversation: (id: string) =>
-    request<{ data: Conversation }>("GET", `/api/conversations/${encodeURIComponent(id)}`).then((r) => r.data),
-  deleteConversation: (id: string) => request<{ success: true }>("DELETE", `/api/conversations/${encodeURIComponent(id)}`),
+  /* The person's one continuous chat, a page at a time; `before` pages further back. */
+  chat: (before?: string) =>
+    request<{ data: ChatPage }>("GET", `/api/chat${before ? `?before=${encodeURIComponent(before)}` : ""}`).then((r) => r.data),
+  clearChat: () => request<{ success: true }>("DELETE", "/api/chat"),
 
   chart: () => request<{ data: ChartView }>("GET", "/api/chart").then((r) => r.data)
 };

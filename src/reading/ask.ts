@@ -18,6 +18,8 @@ export interface AskInput {
   /* Earlier turns of this conversation, oldest first. */
   history?: ChatMessage[];
   profile?: PersonProfile;
+  /* When the person last wrote, for noticing they are back after a gap. */
+  lastMessageAt?: Date | null;
   now?: Date;
   /* Build everything up to the prompt, without calling the model. */
   dryRun?: boolean;
@@ -29,6 +31,8 @@ export interface AskResult {
   followUps: string[];
   intent: QuestionIntent;
   need: Need;
+  /* True when this reply is a full, structured reading rather than conversation. */
+  firstReading: boolean;
   evidence: Evidence[];
   /* The remedies the answer suggests, in full, for the app to show as cards. */
   remedies: OfferedRemedy[];
@@ -38,6 +42,9 @@ export interface AskResult {
   model: string | null;
   prompt?: { system: string; user: string };
 }
+
+/* Coming back after this many hours counts as a fresh start for a full reading. */
+const RETURN_AFTER_HOURS = 12;
 
 /* Shown instead of a reading when a message signals self-harm. */
 export const SELF_HARM_RESPONSE = `I'm really sorry you're feeling this way. You don't have to carry it alone, and this is more important than any chart.
@@ -137,6 +144,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
       followUps: [],
       intent,
       need: "support",
+      firstReading: false,
       evidence: [],
       remedies: [],
       remediesOffered: [],
@@ -145,8 +153,14 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
     };
   }
 
-  /* The opening reply of a conversation is a fuller, structured reading; later turns stay conversational. */
-  const firstReading = history.length === 0 && intent.need !== "daily";
+  /*
+    One continuous chat, so a full, structured reading is given when the
+    conversation turns to something new: the very first message, a new
+    topic, or a return after a long gap. Otherwise Saarthi keeps talking.
+  */
+  const hoursAway = input.lastMessageAt ? (now.getTime() - input.lastMessageAt.getTime()) / 3_600_000 : null;
+  const firstReading =
+    intent.need !== "daily" && (history.length === 0 || intent.newTopic || (hoursAway !== null && hoursAway >= RETURN_AFTER_HOURS));
 
   const evidence = rankEvidence(gatherEvidence(input.chart, intent, now, question, firstReading), intent, {
     firstReading
@@ -161,7 +175,8 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
     remedies: remediesOffered,
     now,
     profile: input.profile,
-    firstReading
+    firstReading,
+    hoursAway
   });
 
   if (input.dryRun) {
@@ -171,6 +186,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
       followUps: [],
       intent,
       need: intent.need,
+      firstReading,
       evidence,
       remedies: [],
       remediesOffered,
@@ -205,6 +221,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
     followUps: result.followUps.slice(0, 3),
     intent,
     need: intent.need,
+    firstReading,
     evidence,
     remedies: remediesOffered.filter((r) => result.remediesUsed.includes(r.ref)),
     remediesOffered,

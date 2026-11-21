@@ -233,3 +233,37 @@ describe("first reading", () => {
     assert.doesNotMatch(result.prompt!.user, /In this chart[^.]*longevity/);
   });
 });
+
+describe("one continuous chat", () => {
+  it("gives a full reading again when they come back after a gap", async () => {
+    const result = await askQuestion({
+      chart,
+      question: "I'm exhausted, nothing works out for me",
+      history: earlier,
+      lastMessageAt: new Date(now.getTime() - 3 * 24 * 3600 * 1000),
+      now,
+      dryRun: true
+    });
+    assert.equal(result.firstReading, true);
+    assert.match(result.prompt!.user, /FIRST READING/);
+    assert.match(result.prompt!.user, /back after about 3 days/);
+  });
+
+  it("keeps talking, without a full reading, a few minutes later", async () => {
+    const result = await askQuestion({
+      chart,
+      question: "I'm exhausted, nothing works out for me",
+      history: earlier,
+      lastMessageAt: new Date(now.getTime() - 5 * 60 * 1000),
+      now,
+      dryRun: true
+    });
+    assert.equal(result.firstReading, false);
+    assert.doesNotMatch(result.prompt!.user, /back after/);
+  });
+
+  it("tells the model there are no separate chats", async () => {
+    const result = await askQuestion({ chart, question: "Should I change jobs?", now, dryRun: true });
+    assert.match(result.prompt!.system, /no separate chats/);
+  });
+});

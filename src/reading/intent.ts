@@ -26,6 +26,8 @@ export interface QuestionIntent {
   need: Need;
   /* They ask what to do about it: remedies, upay, solutions. */
   wantsRemedies: boolean;
+  /* The message opens a new problem or question rather than continuing the recent one. */
+  newTopic: boolean;
   source: "llm" | "keywords";
 }
 
@@ -150,6 +152,8 @@ export function keywordIntent(question: string, now: Date): QuestionIntent {
     sensitive,
     need,
     wantsRemedies: REMEDY_ASK.test(q),
+    /* Keywords cannot tell; the caller treats an empty history as a new topic. */
+    newTopic: false,
     source: "keywords"
   };
 }
@@ -157,7 +161,7 @@ export function keywordIntent(question: string, now: Date): QuestionIntent {
 const INTENT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["domains", "questionType", "windowStart", "windowEnd", "sensitive", "need", "wantsRemedies"],
+  required: ["domains", "questionType", "windowStart", "windowEnd", "sensitive", "need", "wantsRemedies", "newTopic"],
   properties: {
     domains: {
       type: "array",
@@ -172,7 +176,8 @@ const INTENT_SCHEMA = {
     windowEnd: { type: ["string", "null"], description: "YYYY-MM-DD end of that period, or null" },
     sensitive: { type: "string", enum: [...SENSITIVITIES] },
     need: { type: "string", enum: [...NEEDS] },
-    wantsRemedies: { type: "boolean" }
+    wantsRemedies: { type: "boolean" },
+    newTopic: { type: "boolean" }
   }
 };
 
@@ -207,6 +212,7 @@ export async function classifyQuestion(
       sensitive: Sensitivity;
       need: Need;
       wantsRemedies: boolean;
+      newTopic: boolean;
     }>({
       model: models.intent(),
       temperature: 0,
@@ -231,6 +237,8 @@ need, what the person wants from this message (they never say it; infer it):
 - "optimise": things are going well or they want to make good use of a promising time ("I just got promoted, how do I make the most of it?", "Is this a good time to start my business?").
 
 wantsRemedies: true when they ask what they can do about it: remedies, upay, mantras, solutions, "what can I do".
+
+newTopic: this is one continuous chat with no separate threads. true when the message brings up a problem, decision or life area that the recent conversation was not about (or there is no recent conversation). false for follow-ups, replies to Saarthi's questions, thanks, small talk, or more detail on the same matter.
 
 Resolve relative periods against today ("next year", "in the coming months", "after my exams in March"). Leave the window null if no period is stated or clearly implied.
 
@@ -258,6 +266,7 @@ Use the conversation so far to resolve follow-ups such as "and what about tomorr
       sensitive: result.sensitive,
       need: NEEDS.includes(result.need) ? result.need : "guidance",
       wantsRemedies: result.wantsRemedies === true,
+      newTopic: result.newTopic === true,
       source: "llm"
     };
   } catch (error) {

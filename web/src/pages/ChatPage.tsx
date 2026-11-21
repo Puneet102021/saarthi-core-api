@@ -1,10 +1,9 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-import { api, Evidence, Remedy } from "../api";
+import { api, Evidence, Remedy, StoredMessage } from "../api";
 import { useAuth } from "../auth";
 import { AssistantMessage } from "../components/AssistantMessage";
-import type { ShellContext } from "../components/AppShell";
 import { Mark } from "../components/Brand";
 import { Icon } from "../components/Icon";
 
@@ -12,6 +11,7 @@ interface Turn {
   key: string;
   role: "user" | "assistant";
   content: string;
+  createdAt: string;
   evidence?: Evidence[];
   remedies?: Remedy[];
   followUps?: string[];
@@ -30,25 +30,55 @@ function greeting(name?: string | null) {
   return name ? `${part}, ${name.split(" ")[0]}` : part;
 }
 
+function toTurn(m: StoredMessage): Turn {
+  return {
+    key: m.id,
+    role: m.role,
+    content: m.content,
+    createdAt: m.createdAt,
+    evidence: m.meta?.evidence,
+    remedies: m.meta?.remedies,
+    followUps: m.meta?.followUps
+  };
+}
+
+const dayKey = (iso: string) => new Date(iso).toDateString();
+
+/* "Today", "Yesterday", "Monday", or "12 Nov" / "12 Nov 2025". */
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+  return d.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    ...(d.getFullYear() !== today.getFullYear() ? { year: "numeric" } : {})
+  });
+}
+
+const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
 export default function ChatPage() {
-  const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { me } = useAuth();
-  const { refreshConversations } = useOutletContext<ShellContext>();
 
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [title, setTitle] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<string | null>(null);
 
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  /* A conversation this page just created is already on screen; don't reload it. */
-  const justCreated = useRef<string | null>(null);
+  /* Where to put the scroll position after the next render. */
+  const pendingScroll = useRef<{ mode: "bottom" } | { mode: "keep"; height: number; top: number } | null>(null);
 
   useEffect(() => {
     api
@@ -57,59 +87,58 @@ export default function ChatPage() {
       .catch(() => {});
   }, []);
 
-  /* Prefill the first message from onboarding ("what's on your mind"). */
+  /* The latest page of the chat, opened at the bottom like any messaging app. */
+  useEffect(() => {
+    api
+      .chat()
+      .then((page) => {
+        pendingScroll.current = { mode: "bottom" };
+        setTurns(page.messages.map(toTurn));
+        setHasMore(page.hasMore);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoaded(true));
+  }, []);
+
+  /* Prefill a message passed from onboarding or the chart page. */
   useEffect(() => {
     const draft = (location.state as { draft?: string } | null)?.draft;
     if (draft) {
       setInput(draft);
       navigate(location.pathname, { replace: true, state: null });
+      inputRef.current?.focus();
     }
   }, [location, navigate]);
 
-  useEffect(() => {
-    setError(null);
-
-    if (!id) {
-      setTurns([]);
-      setTitle(null);
-      inputRef.current?.focus();
-      return;
-    }
-
-    if (justCreated.current === id) {
-      justCreated.current = null;
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    api
-      .conversation(id)
-      .then((c) => {
-        if (cancelled) return;
-        setTitle(c.title);
-        setTurns(
-          c.messages.map((m) => ({
-            key: m.id,
-            role: m.role,
-            content: m.content,
-            evidence: m.meta?.evidence,
-            remedies: m.meta?.remedies,
-            followUps: m.meta?.followUps
-          }))
-        );
-      })
-      .catch((err) => !cancelled && setError(err.message))
-      .finally(() => !cancelled && setLoading(false));
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const pending = pendingScroll.current;
+    if (!el || !pending) return;
+    if (pending.mode === "bottom") el.scrollTop = el.scrollHeight;
+    else el.scrollTop = pending.top + (el.scrollHeight - pending.height);
+    pendingScroll.current = null;
   }, [turns, sending]);
+
+  const loadOlder = useCallback(async () => {
+    const el = scrollRef.current;
+    if (!el || loadingOlder || !hasMore || turns.length === 0) return;
+
+    setLoadingOlder(true);
+    try {
+      const page = await api.chat(turns[0].createdAt);
+      pendingScroll.current = { mode: "keep", height: el.scrollHeight, top: el.scrollTop };
+      setTurns((t) => [...page.messages.map(toTurn), ...t]);
+      setHasMore(page.hasMore);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [hasMore, loadingOlder, turns]);
+
+  function onScroll() {
+    if (scrollRef.current && scrollRef.current.scrollTop < 120) loadOlder();
+  }
 
   async function send(text: string) {
     const message = text.trim();
@@ -122,29 +151,25 @@ export default function ChatPage() {
     setError(null);
     setInput("");
     setSending(true);
-    setTurns((t) => [...t, { key: `u${Date.now()}`, role: "user", content: message }]);
+    pendingScroll.current = { mode: "bottom" };
+    setTurns((t) => [...t, { key: `u${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
 
     try {
-      const result = await api.ask(message, id);
+      const result = await api.ask(message);
+      pendingScroll.current = { mode: "bottom" };
       setTurns((t) => [
         ...t,
         {
           key: `a${Date.now()}`,
           role: "assistant",
           content: result.answer,
+          createdAt: new Date().toISOString(),
           evidence: result.evidence,
           remedies: result.remedies,
           followUps: result.followUps
         }
       ]);
       if (result.currentPeriod) setPeriod(result.currentPeriod);
-
-      if (!id) {
-        justCreated.current = result.conversationId;
-        setTitle(message.length > 60 ? `${message.slice(0, 59)}…` : message);
-        navigate(`/c/${result.conversationId}`, { replace: true });
-      }
-      refreshConversations();
     } catch (err) {
       setError((err as Error).message);
       /* Put the message back so nothing they typed is lost. */
@@ -173,22 +198,32 @@ export default function ChatPage() {
 
   return (
     <div className="chat">
-      <header className="chat-head">
-        <span className="chat-title">{title ?? "New conversation"}</span>
-        {period && (
+      {period && (
+        <div className="chat-head">
           <span className="period" title="The planetary period you're in now">
             {period.replace(/ (Mahadasha|Antardasha|Pratyantardasha)/g, "")} period
           </span>
-        )}
-      </header>
+        </div>
+      )}
 
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="chat-inner">
-          {!id && turns.length === 0 && (
+          {hasMore && (
+            <div className="older">
+              <button className="btn ghost small" onClick={loadOlder} disabled={loadingOlder}>
+                {loadingOlder ? "Loading…" : "Show earlier messages"}
+              </button>
+            </div>
+          )}
+
+          {loaded && turns.length === 0 && (
             <div className="empty">
               <Mark size={40} />
               <h1 className="voice">{greeting(me?.profile?.fullName)}</h1>
-              <p className="muted">What's on your mind? Share something you're going through, ask about a decision, or check in on your day.</p>
+              <p className="muted">
+                This is your space to talk with Saarthi, any time. Share what you're going through, ask about a decision,
+                or check in on your day.
+              </p>
               <div className="chips">
                 {STARTERS.map((s) => (
                   <button key={s} className="chip" onClick={() => send(s)}>
@@ -199,17 +234,29 @@ export default function ChatPage() {
             </div>
           )}
 
-          {loading && <p className="muted center">Loading conversation…</p>}
+          {!loaded && <p className="muted center">Loading…</p>}
 
-          {turns.map((t) =>
-            t.role === "user" ? (
-              <div key={t.key} className="msg user">
-                <div className="bubble">{t.content}</div>
+          {turns.map((t, i) => {
+            const newDay = i === 0 || dayKey(turns[i - 1].createdAt) !== dayKey(t.createdAt);
+            return (
+              <div key={t.key}>
+                {newDay && (
+                  <div className="day" role="separator">
+                    <span>{dayLabel(t.createdAt)}</span>
+                  </div>
+                )}
+                {t.role === "user" ? (
+                  <div className="msg user">
+                    <div className="bubble" title={time(t.createdAt)}>
+                      {t.content}
+                    </div>
+                  </div>
+                ) : (
+                  <AssistantMessage content={t.content} evidence={t.evidence} remedies={t.remedies} />
+                )}
               </div>
-            ) : (
-              <AssistantMessage key={t.key} content={t.content} evidence={t.evidence} remedies={t.remedies} />
-            )
-          )}
+            );
+          })}
 
           {sending && (
             <div className="msg assistant thinking" aria-live="polite">
@@ -237,7 +284,6 @@ export default function ChatPage() {
               {error}
             </p>
           )}
-          <div ref={endRef} />
         </div>
       </div>
 
@@ -247,7 +293,7 @@ export default function ChatPage() {
           rows={1}
           value={input}
           maxLength={2000}
-          placeholder="Tell Saarthi what's on your mind"
+          placeholder={turns.length ? "Message Saarthi" : "Tell Saarthi what's on your mind"}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           aria-label="Message"
