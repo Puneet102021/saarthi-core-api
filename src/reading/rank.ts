@@ -3,23 +3,30 @@ import type { Need, QuestionIntent } from "./intent";
 
 /*
   Keep the strongest evidence within a budget, so the model reads a short,
-  relevant brief instead of the whole chart. The budget follows the need:
-  a person venting gets a few facts that place the struggle in time, a daily
-  check-in gets the day, timing questions get more timing evidence.
+  relevant brief instead of the whole chart. Saarthi talks like a friend, so
+  ordinary replies get only a few facts: enough to say what phase they are
+  in and when it shifts. When they ask about the astrology itself, the brief
+  opens up: every running period and what comes next.
 */
-function budgets(intent: QuestionIntent, firstReading: boolean): { natal: number; timing: number } {
-  const byNeed: Partial<Record<Need, { natal: number; timing: number }>> = {
-    /* A first reading explains all three running periods and what comes next. */
-    support: firstReading ? { natal: 3, timing: 9 } : { natal: 3, timing: 3 },
-    daily: { natal: 0, timing: 5 }
+export interface RankOptions {
+  /* The conversation is turning to something new. */
+  firstReading?: boolean;
+  /* They asked about their chart: explain in depth. */
+  deep?: boolean;
+}
+
+function budgets(intent: QuestionIntent, { firstReading = false, deep = false }: RankOptions): { natal: number; timing: number } {
+  if (intent.need === "daily") return { natal: 0, timing: 5 };
+
+  if (deep) {
+    const timingFirst = intent.questionType === "timing" || intent.questionType === "yes_no";
+    return timingFirst ? { natal: 7, timing: 13 } : { natal: 8, timing: 9 };
+  }
+
+  const light: Partial<Record<Need, { natal: number; timing: number }>> = {
+    support: firstReading ? { natal: 2, timing: 4 } : { natal: 2, timing: 2 }
   };
-
-  const fixed = byNeed[intent.need];
-  if (fixed) return fixed;
-
-  const timingFirst = intent.questionType === "timing" || intent.questionType === "yes_no";
-  const base = timingFirst ? { natal: 7, timing: 9 } : { natal: 10, timing: 5 };
-  return firstReading ? { natal: Math.min(base.natal, 8), timing: base.timing + 4 } : base;
+  return light[intent.need] ?? (firstReading ? { natal: 5, timing: 5 } : { natal: 5, timing: 4 });
 }
 
 /* The running dasha and what comes next are the spine of a first reading. */
@@ -28,15 +35,16 @@ const PERIOD_SPINE = /^(dasha:(now|next):|upcoming:)/;
 export function rankEvidence(
   evidence: Evidence[],
   intent: QuestionIntent,
-  { firstReading = false }: { firstReading?: boolean } = {}
+  options: RankOptions = {}
 ): Evidence[] {
-  const budget = budgets(intent, firstReading);
+  const { firstReading = false, deep = false } = options;
+  const budget = budgets(intent, options);
 
   /* Making the most of good times: look at what is working first. */
   const score = (e: Evidence) =>
     e.weight *
     (intent.need === "optimise" && e.polarity === "supportive" ? 1.2 : 1) *
-    (firstReading && PERIOD_SPINE.test(e.key) ? 2 : 1);
+    ((firstReading || deep) && PERIOD_SPINE.test(e.key) ? 2 : 1);
 
   const caveats = evidence.filter((e) => e.kind === "caveat");
   const timing = evidence.filter((e) => e.domain === "timing").sort((a, b) => score(b) - score(a));

@@ -118,7 +118,8 @@ describe("askQuestion by need (dry run)", () => {
     assert.equal(result.need, "support");
     assert.ok(result.evidence.length <= 7, `${result.evidence.length} items`);
     assert.ok(result.evidence.some((e) => e.domain === "mind" || e.kind === "dasha"));
-    assert.ok(result.remediesOffered.length > 0, "a struggling person is offered remedies");
+    /* Mid-conversation, a friend does not keep handing out tips unless asked. */
+    assert.equal(result.remediesOffered.length, 0);
     assert.match(result.prompt!.user, /What they seem to need: support/);
   });
 
@@ -196,16 +197,38 @@ describe("daily check-in for tomorrow", () => {
 });
 
 describe("first reading", () => {
-  it("opens a conversation with the full period story and what comes next", async () => {
+  it("opens a new topic as a friend, with just enough astrology to say when things shift", async () => {
     const result = await askQuestion({ chart, question: "I'm exhausted, nothing works out for me", now, dryRun: true });
     const keys = result.evidence.map((e) => e.key);
+    assert.equal(result.firstReading, true);
+    assert.match(result.prompt!.user, /NEW TOPIC/);
+    assert.doesNotMatch(result.prompt!.user, /ASTROLOGY IN DEPTH/);
+    assert.ok(keys.some((k) => k.startsWith("dasha:now:")), "the phase they are in");
+    assert.ok(keys.some((k) => k.startsWith("dasha:next:") || k.startsWith("upcoming:")), "when it shifts");
+    assert.ok(result.evidence.length <= 8, `${result.evidence.length} items`);
+    assert.ok(result.remediesOffered.length > 0);
+  });
+
+  it("goes deep when they ask about their chart", async () => {
+    const result = await askQuestion({
+      chart,
+      question: "What dasha am I in, and what's coming next astrologically?",
+      history: earlier,
+      now,
+      dryRun: true
+    });
+    const keys = result.evidence.map((e) => e.key);
+    assert.equal(result.intent.wantsAstrology, true);
+    assert.match(result.prompt!.user, /ASTROLOGY IN DEPTH/);
     for (const level of [1, 2, 3]) assert.ok(keys.includes(`dasha:now:${level}`), `running level ${level}`);
     assert.ok(keys.some((k) => k.startsWith("dasha:next:")), "next period");
     assert.ok(keys.some((k) => k.startsWith("upcoming:")), "upcoming transit");
-    assert.match(result.prompt!.user, /FIRST READING/);
-    assert.match(result.prompt!.user, /What's coming next/);
     assert.match(result.prompt!.user, /In this chart \w+ rules/);
-    assert.ok(result.remediesOffered.length > 0);
+  });
+
+  it("keeps astrology in the background for ordinary life questions", () => {
+    assert.equal(keywordIntent("My manager criticised me in front of everyone", now).wantsAstrology, false);
+    assert.equal(keywordIntent("Is Saturn the reason things are slow?", now).wantsAstrology, true);
   });
 
   it("keeps later turns conversational", async () => {
@@ -219,13 +242,13 @@ describe("first reading", () => {
       now,
       dryRun: true
     });
-    assert.doesNotMatch(result.prompt!.user, /FIRST READING/);
+    assert.doesNotMatch(result.prompt!.user, /NEW TOPIC|ASTROLOGY IN DEPTH/);
     assert.ok(!result.evidence.some((e) => e.key.startsWith("upcoming:")));
   });
 
   it("keeps daily check-ins short even when they open a conversation", async () => {
     const result = await askQuestion({ chart, question: "How's today?", now, dryRun: true });
-    assert.doesNotMatch(result.prompt!.user, /FIRST READING/);
+    assert.doesNotMatch(result.prompt!.user, /NEW TOPIC|ASTROLOGY IN DEPTH/);
   });
 
   it("never words the 8th house as lifespan", async () => {
@@ -245,7 +268,7 @@ describe("one continuous chat", () => {
       dryRun: true
     });
     assert.equal(result.firstReading, true);
-    assert.match(result.prompt!.user, /FIRST READING/);
+    assert.match(result.prompt!.user, /NEW TOPIC/);
     assert.match(result.prompt!.user, /back after about 9 days/);
   });
 

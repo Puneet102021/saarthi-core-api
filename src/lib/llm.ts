@@ -25,7 +25,7 @@ function getClient(): OpenAI {
 */
 export const models = {
   answer: () => process.env.OPENAI_MODEL || "gpt-5.4-mini",
-  intent: () => process.env.OPENAI_INTENT_MODEL || "gpt-4o-mini",
+  intent: () => process.env.OPENAI_INTENT_MODEL || "gpt-4.1",
   /* Summarises the conversation and keeps long-term notes; runs after replies. */
   memory: () => process.env.OPENAI_MEMORY_MODEL || "gpt-4.1-mini"
 };

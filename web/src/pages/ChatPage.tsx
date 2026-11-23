@@ -18,10 +18,10 @@ interface Turn {
 }
 
 const STARTERS = [
-  "How's today looking for me?",
-  "I've been feeling stuck lately",
-  "Is this a good time to change jobs?",
-  "What should I focus on this week?"
+  "I just need to talk",
+  "Something's been on my mind",
+  "I have a decision to make",
+  "How's today looking for me?"
 ];
 
 function greeting(name?: string | null) {
@@ -73,19 +73,11 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   /* Where to put the scroll position after the next render. */
   const pendingScroll = useRef<{ mode: "bottom" } | { mode: "keep"; height: number; top: number } | null>(null);
-
-  useEffect(() => {
-    api
-      .chart()
-      .then((c) => setPeriod(c.now.period?.label ?? null))
-      .catch(() => {});
-  }, []);
 
   /* The latest page of the chat, opened at the bottom like any messaging app. */
   useEffect(() => {
@@ -169,7 +161,6 @@ export default function ChatPage() {
           followUps: result.followUps
         }
       ]);
-      if (result.currentPeriod) setPeriod(result.currentPeriod);
     } catch (err) {
       setError((err as Error).message);
       /* Put the message back so nothing they typed is lost. */
@@ -198,14 +189,6 @@ export default function ChatPage() {
 
   return (
     <div className="chat">
-      {period && (
-        <div className="chat-head">
-          <span className="period" title="The planetary period you're in now">
-            {period.replace(/ (Mahadasha|Antardasha|Pratyantardasha)/g, "")} period
-          </span>
-        </div>
-      )}
-
       <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="chat-inner">
           {hasMore && (
@@ -221,8 +204,8 @@ export default function ChatPage() {
               <Mark size={40} />
               <h1 className="voice">{greeting(me?.profile?.fullName)}</h1>
               <p className="muted">
-                This is your space to talk with Saarthi, any time. Share what you're going through, ask about a decision,
-                or check in on your day.
+                Talk to Saarthi the way you'd talk to a friend who really listens. Big things, small things, or just how
+                your day went.
               </p>
               <div className="chips">
                 {STARTERS.map((s) => (

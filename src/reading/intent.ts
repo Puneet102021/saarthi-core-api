@@ -28,6 +28,8 @@ export interface QuestionIntent {
   wantsRemedies: boolean;
   /* The message opens a new problem or question rather than continuing the recent one. */
   newTopic: boolean;
+  /* They ask about the astrology itself (their chart, periods, planets, transits): answer in depth. */
+  wantsAstrology: boolean;
   source: "llm" | "keywords";
 }
 
@@ -81,6 +83,9 @@ const DAILY = /\b(today|tonight|tomorrow|this week|this weekend|daily|horoscope|
 
 const OPTIMISE =
   /\b(make the most|most of (it|this)|good time to|right time to|auspicious|going well|going great|good phase|got (promoted|married|engaged|the job|selected)|new job|celebrat\w*|maximi[sz]e|capitali[sz]e|momentum)\b/;
+
+const ASTROLOGY_ASK =
+  /\b(astrolog\w*|chart|kundli|kundali|horoscope|dasha|mahadasha|antardasha|planets?|saturn|shani|jupiter|rahu|ketu|venus|mars|mercury|transits?|sade ?sati|nakshatra|ascendant|lagna|moon sign|sun sign|rising sign|dosha|manglik)\b/;
 
 const REMEDY_ASK = /\b(remed\w*|upay\w*|upaa?ya|solutions?|what can i do|what should i do|how do i (fix|change|improve)|how can i (fix|change|improve)|mantra)\b/;
 
@@ -154,6 +159,7 @@ export function keywordIntent(question: string, now: Date): QuestionIntent {
     wantsRemedies: REMEDY_ASK.test(q),
     /* Keywords cannot tell; the caller treats an empty history as a new topic. */
     newTopic: false,
+    wantsAstrology: ASTROLOGY_ASK.test(q),
     source: "keywords"
   };
 }
@@ -161,7 +167,7 @@ export function keywordIntent(question: string, now: Date): QuestionIntent {
 const INTENT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["domains", "questionType", "windowStart", "windowEnd", "sensitive", "need", "wantsRemedies", "newTopic"],
+  required: ["domains", "questionType", "windowStart", "windowEnd", "sensitive", "need", "wantsRemedies", "newTopic", "wantsAstrology"],
   properties: {
     domains: {
       type: "array",
@@ -177,7 +183,8 @@ const INTENT_SCHEMA = {
     sensitive: { type: "string", enum: [...SENSITIVITIES] },
     need: { type: "string", enum: [...NEEDS] },
     wantsRemedies: { type: "boolean" },
-    newTopic: { type: "boolean" }
+    newTopic: { type: "boolean" },
+    wantsAstrology: { type: "boolean" }
   }
 };
 
@@ -213,6 +220,7 @@ export async function classifyQuestion(
       need: Need;
       wantsRemedies: boolean;
       newTopic: boolean;
+      wantsAstrology: boolean;
     }>({
       model: models.intent(),
       temperature: 0,
@@ -240,9 +248,11 @@ wantsRemedies: true when they ask what they can do about it: remedies, upay, man
 
 newTopic: this is one continuous chat with no separate threads. true when the message brings up a problem, decision or life area that the recent conversation was not about (or there is no recent conversation). false for follow-ups, replies to Saarthi's questions, thanks, small talk, or more detail on the same matter.
 
+wantsAstrology: true only when they ask about the astrology itself: their chart, dasha or periods, planets, transits, Sade Sati, yogas or doshas, or "why is this happening astrologically". false for ordinary life questions, even ones about timing ("when will things get better?").
+
 Resolve relative periods against today ("next year", "in the coming months", "after my exams in March"). Leave the window null if no period is stated or clearly implied.
 
-sensitive: "self_harm" for any hint of self-harm or suicide; "distress" for clear emotional strain short of that (hopeless, can't cope, panic, grief, falling apart); "longevity" for questions about death or lifespan; "medical", "legal" or "financial" (investments, trading) when the message asks for a decision in that field; otherwise "none".
+sensitive: "self_harm" for any hint of self-harm or suicide; "distress" only for acute emotional strain short of that (hopeless, can't cope, panic attacks, grief, falling apart, not sleeping or eating for days), never for everyday stress, disappointment, self-doubt or a bad day at work; "longevity" for questions about death or lifespan; "medical", "legal" or "financial" (investments, trading) when the message asks for a decision in that field; otherwise "none".
 
 Use the conversation so far to resolve follow-ups such as "and what about tomorrow?" or "thanks, that helps".${hint}`
         },
@@ -267,6 +277,7 @@ Use the conversation so far to resolve follow-ups such as "and what about tomorr
       need: NEEDS.includes(result.need) ? result.need : "guidance",
       wantsRemedies: result.wantsRemedies === true,
       newTopic: result.newTopic === true,
+      wantsAstrology: result.wantsAstrology === true,
       source: "llm"
     };
   } catch (error) {

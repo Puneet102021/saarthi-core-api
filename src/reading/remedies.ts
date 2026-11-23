@@ -428,6 +428,9 @@ export function selectRemedies(
     if (!hardDay && !intent.wantsRemedies) return [];
     /* One calming option and nothing else: a check-in is not a programme. */
     return [{ ...REMEDIES.find((r) => r.id === "moon-name-it")!, ref: "R1", framing: "ease" }];
+  } else if (!firstReading && !intent.wantsRemedies && intent.sensitive !== "distress") {
+    /* In the flow of conversation a friend doesn't keep handing out tips; only when asked or when it's hard. */
+    return [];
   } else if (intent.need === "optimise" && !struggling) {
     framing = "strengthen";
 

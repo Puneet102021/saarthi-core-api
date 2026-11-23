@@ -77,10 +77,10 @@ function gatherEvidence(
   intent: QuestionIntent,
   now: Date,
   question: string,
-  firstReading: boolean
+  withUpcoming: boolean
 ): Evidence[] {
   const evidence = evidenceForNeed(chart, intent, now, question);
-  if (!firstReading) return evidence;
+  if (!withUpcoming) return evidence;
 
   /* A first reading explains when the current phase ends and what comes next. */
   const seen = new Set(evidence.map((e) => `${e.kind}:${e.title.split(" ")[0]}:${e.timeframe?.start}`));
@@ -169,8 +169,12 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
   const firstReading =
     intent.need !== "daily" && (history.length === 0 || intent.newTopic || (hoursAway !== null && hoursAway >= RETURN_AFTER_HOURS));
 
-  const evidence = rankEvidence(gatherEvidence(input.chart, intent, now, question, firstReading), intent, {
-    firstReading
+  /* Depth only when they ask about the astrology itself; otherwise astrology stays in the background. */
+  const deep = intent.wantsAstrology && intent.need !== "daily";
+
+  const evidence = rankEvidence(gatherEvidence(input.chart, intent, now, question, firstReading || deep), intent, {
+    firstReading,
+    deep
   });
   const remediesOffered = selectRemedies(input.chart, evidence, intent, now, { firstReading });
 
@@ -214,7 +218,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
   }>({
     model,
     temperature: 0.5,
-    maxTokens: firstReading ? 1800 : 1200,
+    maxTokens: firstReading || deep ? 1800 : 1200,
     schemaName: "saarthi_answer",
     schema: ANSWER_SCHEMA,
     messages: [{ role: "system", content: SYSTEM_PROMPT }, ...history, { role: "user", content: user }]
