@@ -146,35 +146,30 @@ export default function ChatPage() {
     pendingScroll.current = { mode: "bottom" };
     setTurns((t) => [...t, { key: `u${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
 
+    /* An empty reply bubble the stream fills in; updaters stay pure (React may run them twice). */
     const replyKey = `a${Date.now()}`;
-    let started = false;
+    setTurns((t) => [...t, { key: replyKey, role: "assistant", content: "", createdAt: new Date().toISOString() }]);
 
     try {
       const result = await api.askStream(message, (text) => {
-        /* The reply grows in its own bubble as it is written, like someone typing. */
         pendingScroll.current = { mode: "bottom" };
-        setTurns((t) => {
-          if (!started) {
-            started = true;
-            return [...t, { key: replyKey, role: "assistant", content: text, createdAt: new Date().toISOString() }];
-          }
-          return t.map((turn) => (turn.key === replyKey ? { ...turn, content: turn.content + text } : turn));
-        });
+        setTurns((t) => t.map((turn) => (turn.key === replyKey ? { ...turn, content: turn.content + text } : turn)));
       });
 
       pendingScroll.current = { mode: "bottom" };
-      setTurns((t) => {
-        const final: Turn = {
-          key: replyKey,
-          role: "assistant",
-          content: result.answer,
-          createdAt: new Date().toISOString(),
-          evidence: result.evidence,
-          remedies: result.remedies,
-          followUps: result.followUps
-        };
-        return started ? t.map((turn) => (turn.key === replyKey ? final : turn)) : [...t, final];
-      });
+      setTurns((t) =>
+        t.map((turn) =>
+          turn.key === replyKey
+            ? {
+                ...turn,
+                content: result.answer,
+                evidence: result.evidence,
+                remedies: result.remedies,
+                followUps: result.followUps
+              }
+            : turn
+        )
+      );
     } catch (err) {
       setError((err as Error).message);
       /* Take back the half-written reply and the message, so nothing they typed is lost. */
@@ -248,14 +243,14 @@ export default function ChatPage() {
                       {t.content}
                     </div>
                   </div>
-                ) : (
+                ) : t.content ? (
                   <AssistantMessage content={t.content} evidence={t.evidence} remedies={t.remedies} />
-                )}
+                ) : null}
               </div>
             );
           })}
 
-          {sending && turns[turns.length - 1]?.role === "user" && (
+          {sending && turns[turns.length - 1]?.content === "" && (
             <div className="msg assistant thinking" aria-live="polite">
               <span className="dots">
                 <i />
