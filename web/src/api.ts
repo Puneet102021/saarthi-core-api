@@ -55,6 +55,59 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/*
+  POST /api/ask/stream reads server-sent events: the reply arrives piece by
+  piece (onDelta), then the full result. Falls back to a thrown ApiError,
+  like request(), when the server refuses before streaming starts.
+*/
+async function streamRequest(path: string, body: unknown, onDelta: (text: string) => void): Promise<AskResult> {
+  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "text/event-stream" };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
+  } catch {
+    throw new ApiError("Couldn't reach Saarthi. Check your connection and try again.", 0);
+  }
+
+  if (!res.ok || !res.body || !(res.headers.get("Content-Type") ?? "").includes("text/event-stream")) {
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && token) onUnauthorized();
+    throw new ApiError(data?.error || data?.message || "Something went wrong. Try again.", res.status);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: AskResult | null = null;
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let split: number;
+    while ((split = buffer.indexOf("\n\n")) !== -1) {
+      const raw = buffer.slice(0, split);
+      buffer = buffer.slice(split + 2);
+
+      const event = /^event: (.*)$/m.exec(raw)?.[1];
+      const data = /^data: (.*)$/m.exec(raw)?.[1];
+      if (!event || data === undefined) continue;
+
+      const payload = JSON.parse(data);
+      if (event === "delta") onDelta(payload.text);
+      else if (event === "done") result = payload as AskResult;
+      else if (event === "error") throw new ApiError(payload.error, 500);
+    }
+  }
+
+  if (!result) throw new ApiError("The reply was cut off. Try again.", 0);
+  return result;
+}
+
 /* ---- Types (only the fields the app uses) ---- */
 
 export interface AuthResult {
@@ -231,6 +284,8 @@ export const api = {
   searchLocations: (q: string) => request<Location[]>("GET", `/api/locations/search?q=${encodeURIComponent(q)}`),
 
   ask: (message: string) => request<{ data: AskResult }>("POST", "/api/ask", { message }).then((r) => r.data),
+  /* The same, with the reply arriving as it is written. */
+  askStream: (message: string, onDelta: (text: string) => void) => streamRequest("/api/ask/stream", { message }, onDelta),
 
   /* The person's one continuous chat, a page at a time; `before` pages further back. */
   chat: (before?: string) =>

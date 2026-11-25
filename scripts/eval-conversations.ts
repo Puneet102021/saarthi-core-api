@@ -5,7 +5,9 @@
   is scored against a rubric that includes how much astrology the moment
   called for.
 
-    npx tsx scripts/eval-conversations.ts <report.md> [label]
+    npx tsx scripts/eval-conversations.ts <report.md> [label] [--stream]
+
+  --stream scores the streamed replies the web app uses.
 
   Needs OPENAI_API_KEY. Uses no database.
 */
@@ -15,6 +17,7 @@ import fs from "fs";
 import { buildNatalChart } from "../src/astrology/chart";
 import { ChatMessage, jsonCompletion } from "../src/lib/llm";
 import { askQuestion } from "../src/reading/ask";
+import { streamQuestion } from "../src/reading/stream";
 
 type Level = "none" | "subtle" | "full";
 
@@ -111,9 +114,11 @@ Score the LAST reply from 1 (poor) to 5 (excellent) on:
 - wantToReply: how much the person would want to send another message.
 Add a one-sentence note on the biggest weakness.`;
 
+const STREAM = process.argv.includes("--stream");
+
 async function run() {
   const out = process.argv[2];
-  const label = process.argv[3] ?? "run";
+  const label = process.argv[3] && !process.argv[3].startsWith("--") ? process.argv[3] : "run";
   if (!out) throw new Error("Usage: eval-conversations.ts <report.md> [label]");
 
   const chart = buildNatalChart({ date: "1992-03-14", time: "06:45", timezone: "Asia/Kolkata", latitude: 19.07, longitude: 72.88 });
@@ -128,14 +133,8 @@ async function run() {
     let turnsSinceAstrology: number | null = null;
 
     for (const turn of script.turns) {
-      const result = await askQuestion({
-        chart,
-        question: turn.message,
-        history: [...history],
-        profile: script.profile,
-        now,
-        turnsSinceAstrology
-      });
+      const input = { chart, question: turn.message, history: [...history], profile: script.profile, now, turnsSinceAstrology };
+      const result = STREAM ? await streamQuestion(input, { onDelta: () => {} }) : await askQuestion(input);
       turnsSinceAstrology =
         result.astrologyLevel !== "none" ? 0 : turnsSinceAstrology === null ? null : turnsSinceAstrology + 1;
       const reply = (result.answer ?? "").replace(/\s*\[[ER]\d+(?:\s*,\s*[ER]\d+)*\]/g, "");

@@ -105,3 +105,55 @@ export async function jsonCompletion<T>({
 
   return JSON.parse(content) as T;
 }
+
+/*
+  A plain-text completion streamed token by token, so the reply can appear
+  as it is written. onDelta gets each new piece; the full text is returned.
+*/
+export async function streamText({
+  model,
+  messages,
+  temperature = 0.5,
+  maxTokens = 1500,
+  onDelta
+}: {
+  model: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  const stream = isReasoningModel(model)
+    ? await getClient().chat.completions.create({
+        model,
+        messages,
+        max_completion_tokens: maxTokens * 4,
+        reasoning_effort: reasoningEffort(),
+        stream: true
+      })
+    : await getClient().chat.completions.create({
+        model,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: true
+      });
+
+  let text = "";
+  let finish: string | null = null;
+
+  for await (const chunk of stream) {
+    const choice = chunk.choices[0];
+    const delta = choice?.delta?.content;
+    if (delta) {
+      text += delta;
+      onDelta(delta);
+    }
+    if (choice?.finish_reason) finish = choice.finish_reason;
+  }
+
+  if (finish === "length") throw new Error("Model ran out of tokens before finishing");
+  if (!text.trim()) throw new Error("Model returned no content");
+
+  return text;
+}

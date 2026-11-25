@@ -204,15 +204,18 @@ textarea { resize: vertical; }
 .chip { font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; text-align: left; }
 .chip:hover { border-color: var(--accent); color: var(--accent-text); }
 
-.msg { margin-bottom: 22px; }
+.msg { margin-bottom: 14px; }
 .day { display: flex; align-items: center; gap: 12px; margin: 26px 0 18px; color: var(--text-3); font-size: 12px; }
 .day::before, .day::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .older { text-align: center; margin-bottom: 8px; }
 .btn.danger { color: var(--danger); border-color: var(--danger); }
 .msg.user { display: flex; justify-content: flex-end; }
-.bubble { background: var(--surface-2); border-radius: 16px 16px 4px 16px; padding: 10px 14px; max-width: 80%; white-space: pre-wrap; overflow-wrap: anywhere; }
-.answer { font-size: 17px; line-height: 1.65; }
-.answer p { margin: 0 0 12px; }
+.bubble { background: var(--accent-soft); color: var(--text); border-radius: 18px 18px 4px 18px; padding: 9px 14px; max-width: 78%; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+/* Saarthi's messages read like messages: a bubble on the left, the normal font. */
+.msg.assistant { max-width: 88%; }
+.answer { display: inline-block; max-width: 100%; font-size: 15.5px; line-height: 1.55; background: var(--surface); border: 1px solid var(--border); border-radius: 18px 18px 18px 4px; padding: 10px 15px; overflow-wrap: anywhere; }
+.answer p { margin: 0 0 10px; }
+.answer p:last-child, .answer ul:last-child, .answer ol:last-child { margin-bottom: 0; }
 .answer ul, .answer ol { margin: 0 0 12px; padding-left: 22px; }
 .answer strong { font-weight: 600; }
 .answer h2, .answer h3, .answer h4 {
@@ -310,7 +313,8 @@ textarea { resize: vertical; }
   .topnav-link span { display: none; }
   .topnav-link { padding: 8px; }
   .chat-inner { padding: 18px 16px 8px; }
-  .answer { font-size: 16px; }
+  .answer { font-size: 15.5px; }
+  .msg.assistant { max-width: 94%; }
   .bubble { max-width: 88%; }
   .composer { width: calc(100% - 20px); }
 }
@@ -325,3 +329,7 @@ textarea { resize: vertical; }
 .memory-running { font-size: 14px; color: var(--text-2); background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; margin: 0; }
 .memory-empty { background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; }
 .card .btn.danger { margin-top: 6px; }
+
+/* A little space between a bubble and what sits under it. */
+.msg.assistant .remedies { margin-top: 8px; }
+.msg.assistant .why { margin-top: 4px; padding-left: 6px; }

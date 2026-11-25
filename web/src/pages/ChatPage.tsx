@@ -146,25 +146,39 @@ export default function ChatPage() {
     pendingScroll.current = { mode: "bottom" };
     setTurns((t) => [...t, { key: `u${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
 
+    const replyKey = `a${Date.now()}`;
+    let started = false;
+
     try {
-      const result = await api.ask(message);
+      const result = await api.askStream(message, (text) => {
+        /* The reply grows in its own bubble as it is written, like someone typing. */
+        pendingScroll.current = { mode: "bottom" };
+        setTurns((t) => {
+          if (!started) {
+            started = true;
+            return [...t, { key: replyKey, role: "assistant", content: text, createdAt: new Date().toISOString() }];
+          }
+          return t.map((turn) => (turn.key === replyKey ? { ...turn, content: turn.content + text } : turn));
+        });
+      });
+
       pendingScroll.current = { mode: "bottom" };
-      setTurns((t) => [
-        ...t,
-        {
-          key: `a${Date.now()}`,
+      setTurns((t) => {
+        const final: Turn = {
+          key: replyKey,
           role: "assistant",
           content: result.answer,
           createdAt: new Date().toISOString(),
           evidence: result.evidence,
           remedies: result.remedies,
           followUps: result.followUps
-        }
-      ]);
+        };
+        return started ? t.map((turn) => (turn.key === replyKey ? final : turn)) : [...t, final];
+      });
     } catch (err) {
       setError((err as Error).message);
-      /* Put the message back so nothing they typed is lost. */
-      setTurns((t) => t.slice(0, -1));
+      /* Take back the half-written reply and the message, so nothing they typed is lost. */
+      setTurns((t) => t.filter((turn) => turn.key !== replyKey).slice(0, -1));
       setInput(message);
     } finally {
       setSending(false);
@@ -241,14 +255,14 @@ export default function ChatPage() {
             );
           })}
 
-          {sending && (
+          {sending && turns[turns.length - 1]?.role === "user" && (
             <div className="msg assistant thinking" aria-live="polite">
               <span className="dots">
                 <i />
                 <i />
                 <i />
               </span>
-              Saarthi is reflecting…
+              Saarthi is typing…
             </div>
           )}
 

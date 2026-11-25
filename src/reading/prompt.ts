@@ -225,3 +225,9 @@ export const ANSWER_SCHEMA = {
     followUps: { type: "array", items: { type: "string" } }
   }
 };
+
+/* The same instructions for a streamed reply: plain message text instead of JSON. */
+export const STREAM_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(
+  /Return JSON:[\s\S]*$/,
+  "Reply with the message itself, as markdown text only: no JSON, no labels, no preamble. Cite [E#] and [R#] inline where used."
+);

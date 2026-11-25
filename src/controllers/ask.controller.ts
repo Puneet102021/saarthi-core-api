@@ -3,7 +3,8 @@ import { Request, Response } from "express";
 import { buildNatalChart } from "../astrology/chart";
 import { ChatMessage, llmAvailable } from "../lib/llm";
 import { AuthRequest } from "../middleware/auth.middleware";
-import { askQuestion } from "../reading/ask";
+import { askQuestion, AskResult } from "../reading/ask";
+import { streamQuestion } from "../reading/stream";
 import { normaliseProfile } from "../reading/profile";
 import { getUserChart } from "../services/chartService";
 import { loadMemory, scheduleMemoryUpdate, shortTermHistory } from "../memory/store";
@@ -48,6 +49,44 @@ function publicResult(result: Awaited<ReturnType<typeof askQuestion>>, debug: bo
   };
 }
 
+/* What an answer needs from the database: the chart, profile, memory and recent messages. */
+async function conversationContext(userId: string) {
+  const { chart, profile } = await getUserChart(userId);
+  const thread = await getOrCreateThread(userId);
+
+  /* Long-term notes and the running summary, then the recent messages word for word. */
+  const memory = await loadMemory(userId);
+  const { history, lastMessageAt, turnsSinceAstrology } = await shortTermHistory(userId, memory.runningThrough);
+
+  return { chart, profile, thread, memory, history, lastMessageAt, turnsSinceAstrology };
+}
+
+/* Saves the turn and folds older messages into memory in the background. */
+async function saveTurn(userId: string, threadId: string, message: string, result: AskResult) {
+  const data = publicResult(result, false);
+  try {
+    const meta = {
+      need: result.need,
+      firstReading: result.firstReading,
+      astrologyLevel: result.astrologyLevel,
+      intent: result.intent,
+      evidenceUsed: result.evidenceUsed,
+      evidence: data.evidence,
+      remedies: result.remedies,
+      followUps: result.followUps,
+      currentPeriod: result.currentPeriod,
+      model: result.model
+    };
+    /* Plain JSON for the Json column (drops undefined values). */
+    await appendTurn(threadId, message, result.answer ?? "", JSON.parse(JSON.stringify(meta)));
+    scheduleMemoryUpdate(userId);
+  } catch (saveError) {
+    /* The person still gets their answer; the chat just misses this turn. */
+    console.error("CHAT_SAVE_ERROR", saveError);
+  }
+  return data;
+}
+
 /* Each person has one continuous chat; the server keeps it, so the client sends only the new message. */
 export async function ask(req: AuthRequest, res: Response) {
   try {
@@ -58,41 +97,82 @@ export async function ask(req: AuthRequest, res: Response) {
     }
 
     const userId = req.user!.userId;
-    const { chart, profile } = await getUserChart(userId);
-    const thread = await getOrCreateThread(userId);
+    const ctx = await conversationContext(userId);
 
-    /* Long-term notes and the running summary, then the recent messages word for word. */
-    const memory = await loadMemory(userId);
-    const { history, lastMessageAt, turnsSinceAstrology } = await shortTermHistory(userId, memory.runningThrough);
+    const result = await askQuestion({
+      chart: ctx.chart,
+      question: message,
+      history: ctx.history,
+      profile: ctx.profile,
+      lastMessageAt: ctx.lastMessageAt,
+      memory: ctx.memory,
+      turnsSinceAstrology: ctx.turnsSinceAstrology
+    });
 
-    const result = await askQuestion({ chart, question: message, history, profile, lastMessageAt, memory, turnsSinceAstrology });
-    const data = publicResult(result, false);
-
-    try {
-      const meta = {
-        need: result.need,
-        firstReading: result.firstReading,
-        astrologyLevel: result.astrologyLevel,
-        intent: result.intent,
-        evidenceUsed: result.evidenceUsed,
-        evidence: data.evidence,
-        remedies: result.remedies,
-        followUps: result.followUps,
-        currentPeriod: result.currentPeriod,
-        model: result.model
-      };
-      /* Plain JSON for the Json column (drops undefined values). */
-      await appendTurn(thread.id, message, result.answer ?? "", JSON.parse(JSON.stringify(meta)));
-      /* Fold older messages into memory in the background; the reply does not wait. */
-      scheduleMemoryUpdate(userId);
-    } catch (saveError) {
-      /* The person still gets their answer; the chat just misses this turn. */
-      console.error("CHAT_SAVE_ERROR", saveError);
-    }
-
+    const data = await saveTurn(userId, ctx.thread.id, message, result);
     return res.json({ success: true, data });
   } catch (error) {
     return sendError(res, error, "ASK_ERROR");
+  }
+}
+
+/*
+  POST /api/ask/stream: the same answer, sent as server-sent events so it
+  appears as it is written. Events: "start" (need, astrology level),
+  "delta" ({ text }), then "done" (the full result, as /api/ask returns it)
+  or "error" ({ error }).
+*/
+export async function askStream(req: AuthRequest, res: Response) {
+  let streaming = false;
+
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const { message } = parseAsk(req.body);
+
+    if (!llmAvailable()) {
+      return res.status(503).json({ success: false, error: "The answer model is not configured" });
+    }
+
+    const userId = req.user!.userId;
+    const ctx = await conversationContext(userId);
+
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    /* nginx must pass events through as they come, not buffer the whole reply. */
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    streaming = true;
+
+    const result = await streamQuestion(
+      {
+        chart: ctx.chart,
+        question: message,
+        history: ctx.history,
+        profile: ctx.profile,
+        lastMessageAt: ctx.lastMessageAt,
+        memory: ctx.memory,
+        turnsSinceAstrology: ctx.turnsSinceAstrology
+      },
+      {
+        onStart: (info) => send("start", info),
+        onDelta: (text) => send("delta", { text })
+      }
+    );
+
+    const data = await saveTurn(userId, ctx.thread.id, message, result);
+    send("done", data);
+    res.end();
+  } catch (error) {
+    if (!streaming) return sendError(res, error, "ASK_STREAM_ERROR");
+
+    console.error("ASK_STREAM_ERROR", error);
+    send("error", { error: "Saarthi couldn't finish that reply. Try again." });
+    res.end();
   }
 }
 

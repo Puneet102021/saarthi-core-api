@@ -11,7 +11,10 @@ import { Icon } from "./Icon";
 */
 const CITATION = /\s*\[((?:[ER]\d+)(?:\s*,\s*[ER]\d+)*)\]/g;
 
-const withoutCitations = (text: string) => text.replace(CITATION, "");
+/* While a reply streams in, a citation can arrive half written ("[E", "[E1, E"); hide those too. */
+const PARTIAL_CITATION = /\s*\[(?:[ER]\d*(?:\s*,\s*)?)*$/;
+
+const withoutCitations = (text: string) => text.replace(CITATION, "").replace(PARTIAL_CITATION, "");
 
 const KIND_LABEL: Record<Remedy["kind"], string> = {
   practical: "Something to try",
@@ -63,7 +66,7 @@ export function AssistantMessage({
 
   return (
     <div className="msg assistant">
-      <div className="voice answer">
+      <div className="answer">
         <ReactMarkdown>{withoutCitations(content)}</ReactMarkdown>
       </div>
 
