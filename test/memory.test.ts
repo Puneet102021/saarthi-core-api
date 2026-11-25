@@ -96,3 +96,26 @@ describe("memoryBlock", () => {
     assert.match(block, /WHERE YOUR CONVERSATION HAS BEEN LATELY/);
   });
 });
+
+describe("experiences", () => {
+  it("keeps the stories people tell, with their own words", () => {
+    const changes = applyFactOps([], {
+      add: [
+        {
+          category: "experience",
+          text: 'Stranded three days at Gata Loops in snow; rode out to Keylong, the bike slipping every 100 m. "Three blankets and it still felt like being naked."',
+          eventDate: null,
+          importance: 3
+        }
+      ],
+      update: [],
+      remove: []
+    });
+    assert.equal(changes.create.length, 1);
+    assert.equal(changes.create[0].category, "experience");
+
+    const block = memoryBlock({ running: null, facts: [{ id: "x", ...changes.create[0] }] })!;
+    assert.match(block, /Experiences they have shared/);
+    assert.match(block, /Three blankets/);
+  });
+});

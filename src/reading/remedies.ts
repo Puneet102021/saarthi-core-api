@@ -422,6 +422,9 @@ export function selectRemedies(
     if (p && !planets.includes(p) && planets.length < 2) planets.push(p);
   };
 
+  /* While they are telling you something, a friend listens; tips only if they ask. */
+  if (intent.need === "share" && !intent.wantsRemedies) return [];
+
   if (intent.need === "daily") {
     /* At most one small practice, and only on a difficult day. */
     const hardDay = evidence.some((e) => e.key.startsWith("daily:") && e.polarity === "challenging");

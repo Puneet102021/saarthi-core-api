@@ -12,7 +12,7 @@
   database and model calls.
 */
 
-export const FACT_CATEGORIES = ["people", "work", "life", "event", "pattern", "helps", "goal", "preference"] as const;
+export const FACT_CATEGORIES = ["people", "work", "life", "experience", "event", "pattern", "helps", "goal", "preference"] as const;
 export type FactCategory = (typeof FACT_CATEGORIES)[number];
 
 export interface Fact {
@@ -124,6 +124,7 @@ const CATEGORY_LABEL: Record<FactCategory, string> = {
   people: "People in their life",
   work: "Work and studies",
   life: "Life situation",
+  experience: "Experiences they have shared (their own words in quotes)",
   event: "Events",
   pattern: "Patterns",
   helps: "What helps them",
@@ -166,14 +167,17 @@ export const MEMORY_SYSTEM_PROMPT = `You keep the memory of Saarthi, a companion
 Running summary ("running"):
 - Up to 180 words, third person ("They ..."), oldest first, most recent last.
 - What has been talked about lately: open threads, how they have been feeling and how that is changing, what Saarthi suggested and how they took it, questions still open.
+- If they were in the middle of telling a story, say where it left off ("They were telling the story of being stranded at Gata Loops; they had just reached Keylong"), so the conversation can pick it up.
 - Fold the new messages in; compress older parts; drop details that are resolved and over a month old unless still relevant.
 
 Long-term notes ("factOps"):
-- Lasting, useful things a caring friend would remember: people (names and relationships), work or studies, life situation, events with dates, patterns in how they react, what helps or doesn't, goals, preferences (for example, prefers practical suggestions to rituals).
-- One idea per note, short, factual, third person. Categories: people, work, life, event, pattern, helps, goal, preference. Importance: 1 minor, 2 useful, 3 central to their story.
+- Lasting, useful things a caring friend would remember: people (names and relationships), work or studies, life situation, experiences they lived through, events with dates, patterns in how they react, what helps or doesn't, goals, preferences (for example, prefers practical suggestions to rituals).
+- Experiences are the stories that shape someone: a trip that went wrong, a loss, a turning point. Note what happened in one or two sentences with the vivid details, and keep one memorable phrase in their own words in quotes ("three blankets and it still felt like being naked"). A friend calls back to these.
+- One idea per note, short, factual, third person. Categories: people, work, life, experience, event, pattern, helps, goal, preference. Importance: 1 minor, 2 useful, 3 central to their story.
 - For events, set eventDate (YYYY-MM-DD), working out relative dates ("next Friday") from the message dates. When an event has happened, update the note with how it went.
 - Update a note when it changes; remove notes that are no longer true or that they asked Saarthi to forget. Never duplicate an existing note.
 - Only record what the person said about themselves and their life. Do not record astrology (the chart is calculated separately).
+- Notes can be up to 300 characters; use the room for experiences.
 - Never record contact details, addresses, ID, account or card numbers, passwords, or other people's private details beyond name and relationship. Record self-harm or crisis gently, without detail (for example, "Went through a very dark patch in November 2026; Tele-MANAS was suggested").
 - If nothing lasting was said, leave factOps empty.
 

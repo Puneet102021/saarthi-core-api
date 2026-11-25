@@ -63,15 +63,16 @@ export async function ask(req: AuthRequest, res: Response) {
 
     /* Long-term notes and the running summary, then the recent messages word for word. */
     const memory = await loadMemory(userId);
-    const { history, lastMessageAt } = await shortTermHistory(userId, memory.runningThrough);
+    const { history, lastMessageAt, turnsSinceAstrology } = await shortTermHistory(userId, memory.runningThrough);
 
-    const result = await askQuestion({ chart, question: message, history, profile, lastMessageAt, memory });
+    const result = await askQuestion({ chart, question: message, history, profile, lastMessageAt, memory, turnsSinceAstrology });
     const data = publicResult(result, false);
 
     try {
       const meta = {
         need: result.need,
         firstReading: result.firstReading,
+        astrologyLevel: result.astrologyLevel,
         intent: result.intent,
         evidenceUsed: result.evidenceUsed,
         evidence: data.evidence,

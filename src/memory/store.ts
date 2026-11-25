@@ -52,22 +52,30 @@ export async function loadMemory(userId: string): Promise<Memory & { runningThro
 export async function shortTermHistory(
   userId: string,
   runningThrough: Date | null
-): Promise<{ history: ChatMessage[]; lastMessageAt: Date | null }> {
+): Promise<{ history: ChatMessage[]; lastMessageAt: Date | null; turnsSinceAstrology: number | null }> {
   const rows = await prisma.message.findMany({
     where: { conversation: { userId }, ...(runningThrough ? { createdAt: { gt: runningThrough } } : {}) },
     orderBy: { createdAt: "desc" },
     take: SHORT_TERM_MESSAGES + 8,
-    select: { role: true, content: true, createdAt: true }
+    select: { role: true, content: true, createdAt: true, meta: true }
   });
 
   const lastUser = rows.find((m) => m.role === "user");
+
+  /* Saarthi's replies, newest first: how many ago did astrology last come up? */
+  const replies = rows.filter((m) => m.role === "assistant");
+  const lastAstro = replies.findIndex((m) => {
+    const level = (m.meta as { astrologyLevel?: string } | null)?.astrologyLevel;
+    return level === "subtle" || level === "full";
+  });
 
   return {
     history: rows
       .reverse()
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    lastMessageAt: lastUser?.createdAt ?? null
+    lastMessageAt: lastUser?.createdAt ?? null,
+    turnsSinceAstrology: lastAstro === -1 ? null : lastAstro
   };
 }
 

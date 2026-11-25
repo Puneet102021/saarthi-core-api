@@ -159,7 +159,7 @@ model MemoryFact {
 
   userId String
 
-  // people, work, life, event, pattern, helps, goal, preference
+  // people, work, life, experience, event, pattern, helps, goal, preference
   category String
 
   text String @db.Text

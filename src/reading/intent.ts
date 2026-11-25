@@ -13,9 +13,13 @@ export type Sensitivity = (typeof SENSITIVITIES)[number];
   What the person needs from this message. Never chosen by the user: it is
   inferred every turn, so one conversation can move from venting to planning.
 */
-export const NEEDS = ["support", "guidance", "support_guidance", "daily", "optimise"] as const;
+export const NEEDS = ["share", "support", "guidance", "support_guidance", "daily", "optimise"] as const;
 
 export type Need = (typeof NEEDS)[number];
+
+export const ASTROLOGY_LEVELS = ["none", "subtle", "full"] as const;
+
+export type AstrologyLevel = (typeof ASTROLOGY_LEVELS)[number];
 
 export interface QuestionIntent {
   domains: DomainId[];
@@ -28,8 +32,11 @@ export interface QuestionIntent {
   wantsRemedies: boolean;
   /* The message opens a new problem or question rather than continuing the recent one. */
   newTopic: boolean;
-  /* They ask about the astrology itself (their chart, periods, planets, transits): answer in depth. */
-  wantsAstrology: boolean;
+  /*
+    How much astrology this reply may carry: none (most turns), subtle (they
+    reflect on why or when) or full (they ask about the astrology itself).
+  */
+  astrologyLevel: AstrologyLevel;
   source: "llm" | "keywords";
 }
 
@@ -86,6 +93,10 @@ const OPTIMISE =
 
 const ASTROLOGY_ASK =
   /\b(astrolog\w*|chart|kundli|kundali|horoscope|dasha|mahadasha|antardasha|planets?|saturn|shani|jupiter|rahu|ketu|venus|mars|mercury|transits?|sade ?sati|nakshatra|ascendant|lagna|moon sign|sun sign|rising sign|dosha|manglik)\b/;
+
+/* Reflecting on why or when, where a friend who knows astrology might bring in one quiet thought. */
+const REFLECTS =
+  /\b(why (does|do|is|am|are|did|has|have) (this|it|everything|nothing|my life|things|i|life)|why me|when will (this|it|things|life|my)|will (this|it|things) (ever )?(end|ease|change|get better|improve)|keeps? happening|always happens|is it (just )?me|what am i doing wrong|bad (phase|patch|luck|time)|unlucky)\b/;
 
 const REMEDY_ASK = /\b(remed\w*|upay\w*|upaa?ya|solutions?|what can i do|what should i do|how do i (fix|change|improve)|how can i (fix|change|improve)|mantra)\b/;
 
@@ -148,7 +159,15 @@ export function keywordIntent(question: string, now: Date): QuestionIntent {
         ? "daily"
         : OPTIMISE.test(q)
           ? "optimise"
-          : "guidance";
+          : asks
+            ? "guidance"
+            : "share";
+
+  const astrologyLevel: AstrologyLevel = ASTROLOGY_ASK.test(q)
+    ? "full"
+    : need === "daily" || questionType === "timing" || REFLECTS.test(q)
+      ? "subtle"
+      : "none";
 
   return {
     domains: domains.length ? domains : ["general"],
@@ -159,7 +178,7 @@ export function keywordIntent(question: string, now: Date): QuestionIntent {
     wantsRemedies: REMEDY_ASK.test(q),
     /* Keywords cannot tell; the caller treats an empty history as a new topic. */
     newTopic: false,
-    wantsAstrology: ASTROLOGY_ASK.test(q),
+    astrologyLevel,
     source: "keywords"
   };
 }
@@ -167,7 +186,7 @@ export function keywordIntent(question: string, now: Date): QuestionIntent {
 const INTENT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["domains", "questionType", "windowStart", "windowEnd", "sensitive", "need", "wantsRemedies", "newTopic", "wantsAstrology"],
+  required: ["domains", "questionType", "windowStart", "windowEnd", "sensitive", "need", "wantsRemedies", "newTopic", "astrologyLevel"],
   properties: {
     domains: {
       type: "array",
@@ -184,7 +203,7 @@ const INTENT_SCHEMA = {
     need: { type: "string", enum: [...NEEDS] },
     wantsRemedies: { type: "boolean" },
     newTopic: { type: "boolean" },
-    wantsAstrology: { type: "boolean" }
+    astrologyLevel: { type: "string", enum: [...ASTROLOGY_LEVELS] }
   }
 };
 
@@ -220,7 +239,7 @@ export async function classifyQuestion(
       need: Need;
       wantsRemedies: boolean;
       newTopic: boolean;
-      wantsAstrology: boolean;
+      astrologyLevel: AstrologyLevel;
     }>({
       model: models.intent(),
       temperature: 0,
@@ -238,6 +257,7 @@ ${domainList}
 questionType: "timing" asks when something will happen; "yes_no" asks whether it will; "guidance" asks what to do; "explanation" asks why something is the way it is; otherwise "general".
 
 need, what the person wants from this message (they never say it; infer it):
+- "share": they are telling you something: a story, an update, an experience, how something went, small talk, or answering your question. They want a friend to listen and engage, not advice ("got stuck at Gata Loops for three days", "yes, reached Keylong", "we finally talked last night").
 - "support": they are struggling or venting and want to be heard and steadied, with no real chart question ("I'm exhausted, nothing works out for me").
 - "guidance": they want to understand a matter or how to go forward ("Should I switch jobs this year?", "How is my marriage looking?").
 - "support_guidance": both: clearly struggling, and also asking why, when it ends, or what to do ("Everything is going wrong, when will this end?").
@@ -248,7 +268,10 @@ wantsRemedies: true when they ask what they can do about it: remedies, upay, man
 
 newTopic: this is one continuous chat with no separate threads. true when the message brings up a problem, decision or life area that the recent conversation was not about (or there is no recent conversation). false for follow-ups, replies to Saarthi's questions, thanks, small talk, or more detail on the same matter.
 
-wantsAstrology: true only when they ask about the astrology itself: their chart, dasha or periods, planets, transits, Sade Sati, yogas or doshas, or "why is this happening astrologically". false for ordinary life questions, even ones about timing ("when will things get better?").
+astrologyLevel, how much astrology a wise friend who knows it would bring into this reply:
+- "full": they ask about the astrology itself: their chart, dasha or periods, planets, transits, Sade Sati, yogas or doshas, kundli, "why is this happening astrologically", "is this karmic".
+- "subtle": they ask when something in their life will happen ("when will I get promoted?"), reflect on why or when, or a struggle keeps coming back ("why does this keep happening to me?", "when will this phase end?", "is it just me?"), or it is a daily check-in. One quiet thought could deepen understanding.
+- "none": everything else, which is most messages: stories, updates, small talk, feelings without a why or when, practical questions, replies to your questions.
 
 Resolve relative periods against today ("next year", "in the coming months", "after my exams in March"). Leave the window null if no period is stated or clearly implied.
 
@@ -277,7 +300,7 @@ Use the conversation so far to resolve follow-ups such as "and what about tomorr
       need: NEEDS.includes(result.need) ? result.need : "guidance",
       wantsRemedies: result.wantsRemedies === true,
       newTopic: result.newTopic === true,
-      wantsAstrology: result.wantsAstrology === true,
+      astrologyLevel: ASTROLOGY_LEVELS.includes(result.astrologyLevel) ? result.astrologyLevel : "none",
       source: "llm"
     };
   } catch (error) {

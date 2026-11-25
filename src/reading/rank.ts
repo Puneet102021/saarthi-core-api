@@ -13,10 +13,13 @@ export interface RankOptions {
   firstReading?: boolean;
   /* They asked about their chart: explain in depth. */
   deep?: boolean;
+  /* One quiet thought at most: just the phase they are in and when it shifts. */
+  subtle?: boolean;
 }
 
-function budgets(intent: QuestionIntent, { firstReading = false, deep = false }: RankOptions): { natal: number; timing: number } {
+function budgets(intent: QuestionIntent, { firstReading = false, deep = false, subtle = false }: RankOptions): { natal: number; timing: number } {
   if (intent.need === "daily") return { natal: 0, timing: 5 };
+  if (subtle) return { natal: 1, timing: 3 };
 
   if (deep) {
     const timingFirst = intent.questionType === "timing" || intent.questionType === "yes_no";
@@ -37,14 +40,14 @@ export function rankEvidence(
   intent: QuestionIntent,
   options: RankOptions = {}
 ): Evidence[] {
-  const { firstReading = false, deep = false } = options;
+  const { firstReading = false, deep = false, subtle = false } = options;
   const budget = budgets(intent, options);
 
   /* Making the most of good times: look at what is working first. */
   const score = (e: Evidence) =>
     e.weight *
     (intent.need === "optimise" && e.polarity === "supportive" ? 1.2 : 1) *
-    ((firstReading || deep) && PERIOD_SPINE.test(e.key) ? 2 : 1);
+    ((firstReading || deep || subtle) && PERIOD_SPINE.test(e.key) ? 2 : 1);
 
   const caveats = evidence.filter((e) => e.kind === "caveat");
   const timing = evidence.filter((e) => e.domain === "timing").sort((a, b) => score(b) - score(a));

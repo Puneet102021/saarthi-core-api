@@ -155,7 +155,7 @@ export interface ChatPage {
   hasMore: boolean;
 }
 
-export type FactCategory = "people" | "work" | "life" | "event" | "pattern" | "helps" | "goal" | "preference";
+export type FactCategory = "people" | "work" | "life" | "experience" | "event" | "pattern" | "helps" | "goal" | "preference";
 
 export interface MemoryFact {
   id: string;

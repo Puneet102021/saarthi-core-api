@@ -5,7 +5,7 @@ import { dailyEvidence } from "./daily";
 import type { DomainId } from "./domains";
 import { natalEvidence } from "./evidence";
 import type { Evidence } from "./evidence";
-import { classifyQuestion, keywordIntent, Need, QuestionIntent } from "./intent";
+import { AstrologyLevel, classifyQuestion, keywordIntent, Need, QuestionIntent } from "./intent";
 import type { Memory } from "../memory/core";
 import type { PersonProfile } from "./profile";
 import { ANSWER_SCHEMA, buildUserMessage, SYSTEM_PROMPT } from "./prompt";
@@ -21,6 +21,8 @@ export interface AskInput {
   profile?: PersonProfile;
   /* Long-term notes and running summary (short-term memory is `history`). */
   memory?: Memory;
+  /* How many of Saarthi's replies ago astrology last came up (null if never). */
+  turnsSinceAstrology?: number | null;
   /* When the person last wrote, for noticing they are back after a gap. */
   lastMessageAt?: Date | null;
   now?: Date;
@@ -34,8 +36,10 @@ export interface AskResult {
   followUps: string[];
   intent: QuestionIntent;
   need: Need;
-  /* True when this reply is a full, structured reading rather than conversation. */
+  /* True when this reply opens a new topic. */
   firstReading: boolean;
+  /* How much astrology this reply was allowed to carry. */
+  astrologyLevel: AstrologyLevel;
   evidence: Evidence[];
   /* The remedies the answer suggests, in full, for the app to show as cards. */
   remedies: OfferedRemedy[];
@@ -52,6 +56,9 @@ export interface AskResult {
   back" and the conversation simply continues.
 */
 const RETURN_AFTER_HOURS = 7 * 24;
+
+/* Replies to wait after a subtle astrological thought before another. */
+const SUBTLE_COOLDOWN_TURNS = 3;
 
 /* Shown instead of a reading when a message signals self-harm. */
 export const SELF_HARM_RESPONSE = `I'm really sorry you're feeling this way. You don't have to carry it alone, and this is more important than any chart.
@@ -152,6 +159,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
       intent,
       need: "support",
       firstReading: false,
+      astrologyLevel: "none",
       evidence: [],
       remedies: [],
       remediesOffered: [],
@@ -169,13 +177,30 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
   const firstReading =
     intent.need !== "daily" && (history.length === 0 || intent.newTopic || (hoursAway !== null && hoursAway >= RETURN_AFTER_HOURS));
 
-  /* Depth only when they ask about the astrology itself; otherwise astrology stays in the background. */
-  const deep = intent.wantsAstrology && intent.need !== "daily";
+  /*
+    A quiet astrological thought should not come back every turn: after one,
+    the next few replies carry none unless they ask about it directly.
+  */
+  if (
+    intent.astrologyLevel === "subtle" &&
+    intent.need !== "daily" &&
+    input.turnsSinceAstrology != null &&
+    input.turnsSinceAstrology < SUBTLE_COOLDOWN_TURNS
+  ) {
+    intent.astrologyLevel = "none";
+  }
 
-  const evidence = rankEvidence(gatherEvidence(input.chart, intent, now, question, firstReading || deep), intent, {
-    firstReading,
-    deep
-  });
+  const deep = intent.astrologyLevel === "full" && intent.need !== "daily";
+
+  /* No astrology this turn means no chart evidence at all; subtle gets just the phase and when it shifts. */
+  const evidence =
+    intent.astrologyLevel === "none"
+      ? []
+      : rankEvidence(gatherEvidence(input.chart, intent, now, question, firstReading || deep), intent, {
+          firstReading,
+          deep,
+          subtle: intent.astrologyLevel === "subtle"
+        });
   const remediesOffered = selectRemedies(input.chart, evidence, intent, now, { firstReading });
 
   const user = buildUserMessage({
@@ -199,6 +224,7 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
       intent,
       need: intent.need,
       firstReading,
+      astrologyLevel: intent.astrologyLevel,
       evidence,
       remedies: [],
       remediesOffered,
@@ -230,10 +256,12 @@ export async function askQuestion(input: AskInput): Promise<AskResult> {
   return {
     answer: sanitise(result.answer, new Set([...evidenceIds, ...remedyIds])),
     evidenceUsed: result.evidenceUsed.filter((id) => evidenceIds.has(id)),
-    followUps: result.followUps.slice(0, 3),
+    /* While they are sharing, canned replies would break the flow: no follow-up chips. */
+    followUps: intent.need === "share" ? [] : result.followUps.slice(0, 2),
     intent,
     need: intent.need,
     firstReading,
+    astrologyLevel: intent.astrologyLevel,
     evidence,
     remedies: remediesOffered.filter((r) => result.remediesUsed.includes(r.ref)),
     remediesOffered,

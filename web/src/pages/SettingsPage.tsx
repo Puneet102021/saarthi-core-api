@@ -8,6 +8,7 @@ const CATEGORY: { id: FactCategory; label: string }[] = [
   { id: "people", label: "People in your life" },
   { id: "work", label: "Work and studies" },
   { id: "life", label: "Your situation" },
+  { id: "experience", label: "Things you've been through" },
   { id: "event", label: "Events" },
   { id: "pattern", label: "Patterns" },
   { id: "helps", label: "What helps you" },
